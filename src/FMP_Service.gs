@@ -147,9 +147,10 @@ const FMPService = {
    * Aggregates all financial data for a single ticker.
    * @param {string} ticker The stock ticker symbol.
    * @param {number} buyPrice The user's buy price (for gain/loss calculation).
+   * @param {number} quantity The number of shares owned.
    * @return {Object} Aggregated data object for Dashboard.
    */
-  getFullFinancialData: function(ticker, buyPrice) {
+  getFullFinancialData: function(ticker, buyPrice, quantity) {
     Utils.log(`Fetching FMP data for ${ticker}...`);
 
     const quote = this.getQuote(ticker);
@@ -160,8 +161,20 @@ const FMPService = {
 
     // Calculate Gain/Loss
     const currentPrice = quote.price || 0;
-    const gainLossPct = buyPrice > 0 ? Utils.calculateChange(currentPrice, buyPrice) : null;
-    const gainLossAbs = buyPrice > 0 ? (currentPrice - buyPrice) : null;
+    const qty = Utils.parseFloat(quantity) || 1; // Default to 1 if not specified
+    const buy = Utils.parseFloat(buyPrice);
+    
+    // Gain/Loss % = (Current - Buy) / Buy
+    const gainLossPct = buy > 0 ? Utils.calculateChange(currentPrice, buy) : null;
+    
+    // Gain/Loss $ = (Current - Buy) × Quantity
+    const gainLossAbs = buy > 0 ? (currentPrice - buy) * qty : null;
+    
+    // Total Investment = Buy Price × Quantity
+    const totalInvestment = buy > 0 ? buy * qty : null;
+    
+    // Current Value = Current Price × Quantity
+    const currentValue = currentPrice * qty;
 
     // Calculate Target Upside
     const targetUpside = target.targetConsensus && currentPrice > 0
@@ -174,6 +187,9 @@ const FMPService = {
       changePct: quote.changesPercentage ? quote.changesPercentage / 100 : null,
       gainLossPct: gainLossPct,
       gainLossAbs: gainLossAbs,
+      totalInvestment: totalInvestment,
+      currentValue: currentValue,
+      quantity: qty,
       marketCap: quote.marketCap,
       pe: metrics.peRatioTTM,
       fwdPe: quote.pe, // FMP quote PE is often forward

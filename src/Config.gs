@@ -25,8 +25,9 @@ const CONFIG = {
     ADD_DATE: 2,    // B
     BUY_DATE: 3,    // C
     BUY_PRICE: 4,   // D
-    USER_MEMO: 5,   // E
-    TAG: 6          // F
+    QUANTITY: 5,    // E - Number of shares
+    USER_MEMO: 6,   // F
+    TAG: 7          // G
   },
 
   // Dashboard Sheet

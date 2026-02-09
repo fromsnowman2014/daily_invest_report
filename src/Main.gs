@@ -25,7 +25,8 @@ function updateDailyReport() {
       try {
         // Fetch real financial data from FMP API
         const buyPrice = Utils.parseFloat(stock.buyPrice);
-        const financialData = FMPService.getFullFinancialData(stock.ticker, buyPrice);
+        const quantity = Utils.parseFloat(stock.quantity) || 1;
+        const financialData = FMPService.getFullFinancialData(stock.ticker, buyPrice, quantity);
         
         // Update Dashboard
         SheetManager.appendDashboardRow(financialData);

@@ -29,7 +29,7 @@ const SheetManager = {
 
   /**
    * Reads the Stock List from the 'Stock List' sheet.
-   * @return {Array<Object>} Array of stock objects {ticker, addDate, buyPrice, userMemo}.
+   * @return {Array<Object>} Array of stock objects.
    */
   getStockList: function() {
     const sheet = this.ensureSheet(CONFIG.SHEET_NAMES.STOCK_LIST);
@@ -40,8 +40,8 @@ const SheetManager = {
       return [];
     }
     
-    // Read from A2 to F{lastRow}
-    const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    // Read from A2 to G{lastRow} (7 columns: Ticker, Add Date, Buy Date, Buy Price, Quantity, Memo, Tag)
+    const data = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
     const stockList = [];
     
     data.forEach(row => {
@@ -49,11 +49,12 @@ const SheetManager = {
       if (ticker) {
         stockList.push({
           ticker: ticker.toString().trim().toUpperCase(),
-          addDate: row[1], // B: Add Date
-          buyDate: row[2], // C: Buy Date
-          buyPrice: row[3], // D: Buy Price
-          userMemo: row[4], // E: User Memo
-          tag: row[5]       // F: Tag
+          addDate: row[1],    // B: Add Date
+          buyDate: row[2],    // C: Buy Date
+          buyPrice: row[3],   // D: Buy Price
+          quantity: row[4],   // E: Quantity (Number of shares)
+          userMemo: row[5],   // F: User Memo
+          tag: row[6]         // G: Tag
         });
       }
     });
@@ -159,7 +160,8 @@ const SheetManager = {
   },
 
   /**
-   * Appends a daily snapshot row to a ticker's Log sheet.
+   * Upserts (update or insert) a daily snapshot row to a ticker's Log sheet.
+   * If today's entry exists, it overwrites. Otherwise, it appends a new row.
    * @param {string} ticker The stock ticker symbol.
    * @param {Object} data The financial data object.
    */
@@ -167,28 +169,39 @@ const SheetManager = {
     const sheet = this.initLogSheet(ticker);
     const today = Utils.formatDate(new Date());
     
-    // Check if today's entry already exists (avoid duplicates)
+    // Build row data based on CONFIG.LOG_COLS
+    const cols = CONFIG.LOG_COLS;
+    const rowData = new Array(6).fill('');
+    
+    rowData[cols.DATE - 1] = today;
+    rowData[cols.PRICE - 1] = data.price;
+    rowData[cols.FWD_PE - 1] = data.fwdPe;
+    rowData[cols.PEG - 1] = data.peg;
+    rowData[cols.RSI - 1] = data.rsi;
+    rowData[cols.SYSTEM_EVENT - 1] = data.systemMemo || '';
+    
+    // Search for existing entry with today's date
     const lastRow = sheet.getLastRow();
+    let existingRowIndex = -1;
+    
     if (lastRow >= 2) {
-      const lastDate = sheet.getRange(lastRow, 1).getValue();
-      if (Utils.formatDate(lastDate) === today) {
-        Utils.log(`Log entry for ${ticker} on ${today} already exists. Skipping.`);
-        return;
+      const dateColumn = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < dateColumn.length; i++) {
+        if (Utils.formatDate(dateColumn[i][0]) === today) {
+          existingRowIndex = i + 2; // +2 because: 0-indexed + header row
+          break;
+        }
       }
     }
     
-    // Build row based on CONFIG.LOG_COLS
-    const cols = CONFIG.LOG_COLS;
-    const row = new Array(6).fill('');
-    
-    row[cols.DATE - 1] = today;
-    row[cols.PRICE - 1] = data.price;
-    row[cols.FWD_PE - 1] = data.fwdPe;
-    row[cols.PEG - 1] = data.peg;
-    row[cols.RSI - 1] = data.rsi;
-    row[cols.SYSTEM_EVENT - 1] = data.systemMemo || '';
-    
-    sheet.appendRow(row);
-    Utils.log(`Appended log entry for ${ticker} on ${today}`);
+    if (existingRowIndex > 0) {
+      // Update existing row (overwrite)
+      sheet.getRange(existingRowIndex, 1, 1, rowData.length).setValues([rowData]);
+      Utils.log(`Updated log entry for ${ticker} on ${today} (row ${existingRowIndex})`);
+    } else {
+      // Append new row
+      sheet.appendRow(rowData);
+      Utils.log(`Appended new log entry for ${ticker} on ${today}`);
+    }
   }
 };
