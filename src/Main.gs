@@ -20,18 +20,21 @@ function updateDailyReport() {
     SheetManager.initDashboard();
     Utils.log('Dashboard initialized.');
     
-    // 3. Loop through stocks (Placeholder for future API calls)
+    // 3. Loop through stocks and fetch real data from FMP API
     stockList.forEach((stock) => {
-      // Placeholder data for testing
-      const testData = {
-        ticker: stock.ticker,
-        price: 150.00,
-        changePct: 0.015,
-        systemMemo: 'Test Data - Waiting for API'
-      };
-      
-      SheetManager.appendDashboardRow(testData);
-      Utils.log(`Processed ${stock.ticker}`);
+      try {
+        // Fetch real financial data from FMP API
+        const buyPrice = Utils.parseFloat(stock.buyPrice);
+        const financialData = FMPService.getFullFinancialData(stock.ticker, buyPrice);
+        
+        SheetManager.appendDashboardRow(financialData);
+        Utils.log(`Processed ${stock.ticker} (Price: ${financialData.price})`);
+        
+        // Add small delay to avoid API rate limiting
+        Utilities.sleep(500);
+      } catch (stockError) {
+        Utils.log(`Error processing ${stock.ticker}: ${stockError.message}`);
+      }
     });
     
     Utils.log('Daily Update Completed.');
