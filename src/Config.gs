@@ -5,10 +5,10 @@
 
 const CONFIG = {
   // --- API ---
-  FMP_API_KEY: PropertiesService.getScriptProperties().getProperty('FMP_API_KEY'),
+  TWELVE_DATA_API_KEY: PropertiesService.getScriptProperties().getProperty('TWELVE_DATA_API_KEY'),
   GEMINI_API_KEY: PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY'),
   
-  FMP_BASE_URL: 'https://financialmodelingprep.com/api/v3',
+  TWELVE_DATA_BASE_URL: 'https://api.twelvedata.com',
   GEMINI_MODEL: 'gemini-1.5-flash',
 
   // --- Spreadsheet ---

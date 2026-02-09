@@ -20,13 +20,13 @@ function updateDailyReport() {
     SheetManager.initDashboard();
     Utils.log('Dashboard initialized.');
     
-    // 3. Loop through stocks and fetch real data from FMP API
+    // 3. Loop through stocks and fetch real data from Twelve Data API
     stockList.forEach((stock) => {
       try {
-        // Fetch real financial data from FMP API
+        // Fetch real financial data from Twelve Data API
         const buyPrice = Utils.parseFloat(stock.buyPrice);
         const quantity = Utils.parseFloat(stock.quantity) || 1;
-        const financialData = FMPService.getFullFinancialData(stock.ticker, buyPrice, quantity);
+        const financialData = TwelveDataService.getFullFinancialData(stock.ticker, buyPrice, quantity);
         
         // Update Dashboard
         SheetManager.appendDashboardRow(financialData);
