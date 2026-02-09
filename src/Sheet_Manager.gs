@@ -63,6 +63,50 @@ const SheetManager = {
   },
 
   /**
+   * Reads the current Dashboard data to check for existing values.
+   * Useful for caching and partial updates.
+   * @return {Object} Map of ticker -> { lastUpdated, fundamentalData }
+   */
+  getDashboardData: function() {
+    const sheet = this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
+    const lastRow = sheet.getLastRow();
+    
+    if (lastRow < 2) return {}; // Header only or empty
+    
+    const data = sheet.getRange(2, 1, lastRow - 1, 25).getValues();
+    const dashboardMap = {};
+    
+    data.forEach(row => {
+      const ticker = row[CONFIG.DASHBOARD_COLS.TICKER - 1];
+      if (ticker) {
+        dashboardMap[ticker] = {
+          pe: row[CONFIG.DASHBOARD_COLS.PE - 1],
+          fwdPe: row[CONFIG.DASHBOARD_COLS.FWD_PE - 1],
+          peg: row[CONFIG.DASHBOARD_COLS.PEG - 1],
+          ps: row[CONFIG.DASHBOARD_COLS.PS - 1],
+          pb: row[CONFIG.DASHBOARD_COLS.PB - 1],
+          evEbitda: row[CONFIG.DASHBOARD_COLS.EV_EBITDA - 1],
+          fcfYield: row[CONFIG.DASHBOARD_COLS.FCF_YIELD - 1],
+          grossMargin: row[CONFIG.DASHBOARD_COLS.GROSS_MARGIN - 1],
+          opMargin: row[CONFIG.DASHBOARD_COLS.OP_MARGIN - 1],
+          roe: row[CONFIG.DASHBOARD_COLS.ROE - 1],
+          roic: row[CONFIG.DASHBOARD_COLS.ROIC - 1],
+          revGrowth: row[CONFIG.DASHBOARD_COLS.REV_GROWTH - 1],
+          epsGrowth: row[CONFIG.DASHBOARD_COLS.EPS_GROWTH - 1],
+          currentRatio: row[CONFIG.DASHBOARD_COLS.CURRENT_RATIO - 1],
+          debtEquity: row[CONFIG.DASHBOARD_COLS.DEBT_EQUITY - 1],
+          rsi: row[CONFIG.DASHBOARD_COLS.RSI - 1],
+          targetUpside: row[CONFIG.DASHBOARD_COLS.TARGET_UPSIDE - 1],
+          systemMemo: row[CONFIG.DASHBOARD_COLS.SYSTEM_MEMO - 1],
+          lastUpdated: row[CONFIG.DASHBOARD_COLS.LAST_UPDATED - 1]
+        };
+      }
+    });
+    
+    return dashboardMap;
+  },
+
+  /**
    * Initializes or Clears the Dashboard sheet structure.
    */
   initDashboard: function() {
@@ -85,8 +129,9 @@ const SheetManager = {
   },
 
   /**
-   * Appends a row to the Dashboard sheet.
-   * @param {Object} data The data object containing values.
+   * Appends or updates a row in the Dashboard sheet.
+   * Supports hybrid mode: GOOGLEFINANCE formulas + Static Values.
+   * @param {Object} data Financial data object.
    */
   appendDashboardRow: function(data) {
     const sheet = this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
