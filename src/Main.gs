@@ -1,6 +1,10 @@
 /**
  * Main.gs
  * Entry point for the Daily Invest Report script.
+ *
+ * Architecture: 2-Phase Update
+ *   Phase 1: Write Dashboard rows (GOOGLEFINANCE formulas + API/cached fundamental data)
+ *   Phase 2: Flush → read back actual values (price etc.) → write Log entries
  */
 
 // Rotation Configuration
@@ -9,7 +13,7 @@ const MAX_DAILY_API_CALLS = 20; // Safe limit below 25
 
 function updateDailyReport(forceUpdateTicker = null) {
   Utils.log('Starting Daily Invest Report Update (Hybrid Strategy)...');
-  
+
   try {
     // 1. Get Stock List
     const stockList = SheetManager.getStockList();
@@ -17,29 +21,32 @@ function updateDailyReport(forceUpdateTicker = null) {
       Utils.log('No stocks found in list.');
       return;
     }
-    
-    // 2. Read Existing Dashboard Data (Caching)
+
+    // 1.5. Aggregate by ticker (sum quantities, weighted avg buy price)
+    const aggregated = aggregateStockList(stockList);
+    Utils.log(`Found ${aggregated.length} unique tickers from ${stockList.length} entries.`);
+
+    // 2. Read Existing Dashboard Data (Caching) - BEFORE clearing
     const cachedData = SheetManager.getDashboardData();
-    
+
     // 3. Initialize Dashboard (Clear previous data)
-    // Note: We read cache FIRST, then clear, then re-populated with hybrid data.
     SheetManager.initDashboard();
-    
+
     let apiCallsMade = 0;
-    
-    // 4. Loop through stocks
-    stockList.forEach((stock) => {
+
+    // ============ Phase 1: Write Dashboard Rows ============
+    aggregated.forEach((stock) => {
       try {
         const ticker = stock.ticker;
-        const buyPrice = Utils.parseFloat(stock.buyPrice);
-        const quantity = Utils.parseFloat(stock.quantity) || 1;
-        
+        const buyPrice = stock.avgBuyPrice;
+        const quantity = stock.totalQuantity;
+
         let financialData = {};
         let shouldFetchApi = false;
-        
+
         // --- Rotation Logic ---
         const cache = cachedData[ticker];
-        
+
         if (forceUpdateTicker === ticker) {
           shouldFetchApi = true;
           Utils.log(`[${ticker}] Force update requested.`);
@@ -47,12 +54,18 @@ function updateDailyReport(forceUpdateTicker = null) {
           shouldFetchApi = true; // New stock, must fetch
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
-          // Check last updated time
           const lastUpdated = new Date(cache.lastUpdated);
           const diffTime = Math.abs(new Date() - lastUpdated);
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
-          if (diffDays >= ROTATION_INTERVAL_DAYS) {
+
+          // Check if cache actually has fundamental data
+          const cacheHasData = cache.fwdPe || cache.peg || cache.ps || cache.pb || cache.evEbitda;
+
+          if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
+            // Cache is empty (previous API call may have failed) - force refetch
+            shouldFetchApi = true;
+            Utils.log(`[${ticker}] Cache has no fundamental data. Forcing API fetch.`);
+          } else if (diffDays >= ROTATION_INTERVAL_DAYS) {
             if (apiCallsMade < MAX_DAILY_API_CALLS) {
               shouldFetchApi = true;
               Utils.log(`[${ticker}] Data expired (${diffDays} days). Scheduled for update.`);
@@ -63,13 +76,11 @@ function updateDailyReport(forceUpdateTicker = null) {
             Utils.log(`[${ticker}] Data fresh enough (${diffDays} days). Using cache.`);
           }
         }
-        
+
         // --- Data Retrieval ---
         if (shouldFetchApi) {
-          // Fetch from Alpha Vantage
           const overview = AlphaVantageService.getCompanyOverview(ticker);
           if (overview && overview.ticker) {
-            // Unify data structure
             financialData = {
               ticker: ticker,
               buyPrice: buyPrice,
@@ -80,27 +91,26 @@ function updateDailyReport(forceUpdateTicker = null) {
               ps: overview.priceToSalesRatio,
               pb: overview.priceToBookRatio,
               evEbitda: overview.evToEbitda,
-              grossMargin: overview.grossProfit, // Note: AV returns GrossProfit, not Margin? Check API. OVERVIEW has ProfitMargin.
+              grossMargin: overview.profitMargin, // AV OVERVIEW returns ProfitMargin
               opMargin: overview.operatingMargin,
               roe: overview.returnOnEquity,
               revGrowth: overview.revenueGrowth,
               epsGrowth: overview.quarterlyEarningsGrowthYOY,
-              currentRatio: null, // AV Overview might usually have this, checking mapped fields
+              currentRatio: null,
               debtEquity: null,
-              rsi: null, 
+              rsi: null,
               targetUpside: null,
-              // Map other fields from AlphaVantage_Service.getCompanyOverview
               ...overview
             };
-            
+
             apiCallsMade++;
             Utils.log(`[${ticker}] API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
-            
-            // Add a sleep to respect 5 calls/min limit (12 seconds delay)
-             Utilities.sleep(12000); 
+
+            // Respect 5 calls/min limit (12 seconds delay)
+            Utilities.sleep(12000);
           } else {
-             Utils.log(`[${ticker}] API Fetch Failed. Falling back to cache.`);
-             financialData = cache || {}; // Fallback
+            Utils.log(`[${ticker}] API Fetch Failed (may be ETF or invalid ticker). Falling back to cache.`);
+            financialData = cache || {};
           }
         } else {
           // Use Cached Data
@@ -111,32 +121,65 @@ function updateDailyReport(forceUpdateTicker = null) {
         financialData.ticker = ticker;
         financialData.buyPrice = buyPrice;
         financialData.quantity = quantity;
-        
-        // Update Dashboard
+
+        // Write Dashboard row (Phase 1)
         SheetManager.appendDashboardRow(financialData);
-        
-        // Append to History Log
-        // Note: price is now GOOGLEFINANCE formula in Dashboard, but we want numeric value for Log.
-        // However, script execution is instant, formulas calculate asynchronously.
-        // We can't easily get the *result* of the formula immediately without flushing/reading back.
-        // Compomise: Log the data we HAVE. 
-        // If we ran API today, we have full data. If we used cache, we have cached data.
-        // Price is tricky. We can't log "Real Time" price easily without fetching it.
-        // BUT, we can log the LAST KNOWN price from cache if available, or just log 0 (user checks dashboard).
-        // Better: Daily Log is for *Trends* (PE, PEG, etc). Price is less critical to log *historically* via this script if we don't fetch it.
-        // Let's log what we have.
-        SheetManager.appendLogRow(ticker, financialData);
-        
+
       } catch (stockError) {
         Utils.log(`Error processing ${stock.ticker}: ${stockError.message}`);
       }
     });
-    
+
+    // ============ Phase 2: Flush & Write Log Entries ============
+    // Force GOOGLEFINANCE formulas to calculate
+    SpreadsheetApp.flush();
+    Utilities.sleep(5000); // Wait for GOOGLEFINANCE to resolve
+
+    // Read back Dashboard with actual calculated values (price, etc.)
+    const freshData = SheetManager.readDashboardValues();
+
+    Object.keys(freshData).forEach(ticker => {
+      try {
+        SheetManager.appendLogRow(ticker, freshData[ticker]);
+      } catch (logError) {
+        Utils.log(`Error writing log for ${ticker}: ${logError.message}`);
+      }
+    });
+
     Utils.log(`Daily Update Completed. Total API Calls: ${apiCallsMade}`);
-    
+
   } catch (error) {
     Utils.log(`Error: ${error.message}`);
   }
+}
+
+/**
+ * Aggregates stock list by ticker: sums quantities, calculates weighted average buy price.
+ * Supports multiple entries for the same ticker (different lots/dates).
+ * @param {Array<Object>} stockList Raw stock list from Sheet.
+ * @return {Array<Object>} Aggregated list: [{ticker, totalQuantity, avgBuyPrice}]
+ */
+function aggregateStockList(stockList) {
+  const tickerMap = {};
+
+  stockList.forEach(stock => {
+    const ticker = stock.ticker;
+    const price = Utils.parseFloat(stock.buyPrice) || 0;
+    const qty = Utils.parseFloat(stock.quantity) || 0;
+
+    if (!tickerMap[ticker]) {
+      tickerMap[ticker] = { ticker: ticker, totalCost: 0, totalQuantity: 0 };
+    }
+
+    tickerMap[ticker].totalCost += price * qty;
+    tickerMap[ticker].totalQuantity += qty;
+  });
+
+  return Object.values(tickerMap).map(item => ({
+    ticker: item.ticker,
+    totalQuantity: item.totalQuantity,
+    avgBuyPrice: item.totalQuantity > 0 ? item.totalCost / item.totalQuantity : 0
+  }));
 }
 
 /**
@@ -144,6 +187,29 @@ function updateDailyReport(forceUpdateTicker = null) {
  */
 function setupSheets() {
   SheetManager.initDashboard();
-  SheetManager.initLogSheets(); // If we have this
   Utils.log('Sheets Initialized.');
+}
+
+/**
+ * Creates a daily trigger to run updateDailyReport at 3:15 AM.
+ * Run this function ONCE manually to set up the schedule.
+ */
+function createTimeDrivenTrigger() {
+  // Delete existing triggers to avoid duplicates
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'updateDailyReport') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  // Create new trigger for 3:15 PM (15:15)
+  ScriptApp.newTrigger('updateDailyReport')
+      .timeBased()
+      .atHour(15)
+      .nearMinute(15)
+      .everyDays(1)
+      .create();
+      
+  Utils.log('Daily Trigger set for ~3:15 PM.');
 }

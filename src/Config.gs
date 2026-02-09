@@ -59,13 +59,32 @@ const CONFIG = {
     LAST_UPDATED: 25     // Y
   },
 
-  // Log Sheet
+  // Log Sheet (mirrors Dashboard metrics for historical tracking)
   LOG_COLS: {
-    DATE: 1,
-    PRICE: 2,
-    FWD_PE: 3,
-    PEG: 4,
-    RSI: 5,
-    SYSTEM_EVENT: 6
-  }
+    DATE: 1,            // A
+    PRICE: 2,           // B
+    CHANGE_PCT: 3,      // C
+    GAIN_LOSS_PCT: 4,   // D
+    GAIN_LOSS_ABS: 5,   // E
+    MARKET_CAP: 6,      // F
+    PE: 7,              // G
+    FWD_PE: 8,          // H
+    PEG: 9,             // I
+    PS: 10,             // J
+    PB: 11,             // K
+    EV_EBITDA: 12,      // L
+    FCF_YIELD: 13,      // M
+    GROSS_MARGIN: 14,   // N
+    OP_MARGIN: 15,      // O
+    ROE: 16,            // P
+    ROIC: 17,           // Q
+    REV_GROWTH: 18,     // R
+    EPS_GROWTH: 19,     // S
+    CURRENT_RATIO: 20,  // T
+    DEBT_EQUITY: 21,    // U
+    RSI: 22,            // V
+    TARGET_UPSIDE: 23,  // W
+    SYSTEM_EVENT: 24    // X
+  },
+  LOG_COL_COUNT: 24
 };

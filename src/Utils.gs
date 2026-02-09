@@ -28,13 +28,17 @@ const Utils = {
   },
 
   /**
-   * Safely parses a float, returning 0 or null if invalid.
+   * Safely parses a float, returning null if invalid.
+   * Returns null (not 0) so callers can distinguish "no data" from "actual zero".
    * @param {any} value The value to parse.
-   * @return {number} The parsed number or 0.
+   * @return {number|null} The parsed number or null.
    */
   parseFloat: function(value) {
+    if (value === null || value === undefined || value === '' || value === 'None' || value === '-') {
+      return null;
+    }
     const parsed = parseFloat(value);
-    return isNaN(parsed) ? 0 : parsed;
+    return isNaN(parsed) ? null : parsed;
   },
   
   /**
