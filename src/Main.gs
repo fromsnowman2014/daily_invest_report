@@ -115,12 +115,17 @@ function updateDailyReport(forceUpdateTicker = null) {
         // Update Dashboard
         SheetManager.appendDashboardRow(financialData);
         
-        // Append to History Log Logic - ONLY if we have fresh data or just want to log price?
-        // With Hybrid, Price is GOOGLEFINANCE (Formula). 
-        // We can't log "Formula" result easily in script without getting display value.
-        // For now, logging might be limited or require reading back the sheet.
-        // Let's Skip Log Update for now in this iteration or log what we have.
-        // SheetManager.appendLogRow(ticker, ...); 
+        // Append to History Log
+        // Note: price is now GOOGLEFINANCE formula in Dashboard, but we want numeric value for Log.
+        // However, script execution is instant, formulas calculate asynchronously.
+        // We can't easily get the *result* of the formula immediately without flushing/reading back.
+        // Compomise: Log the data we HAVE. 
+        // If we ran API today, we have full data. If we used cache, we have cached data.
+        // Price is tricky. We can't log "Real Time" price easily without fetching it.
+        // BUT, we can log the LAST KNOWN price from cache if available, or just log 0 (user checks dashboard).
+        // Better: Daily Log is for *Trends* (PE, PEG, etc). Price is less critical to log *historically* via this script if we don't fetch it.
+        // Let's log what we have.
+        SheetManager.appendLogRow(ticker, financialData);
         
       } catch (stockError) {
         Utils.log(`Error processing ${stock.ticker}: ${stockError.message}`);

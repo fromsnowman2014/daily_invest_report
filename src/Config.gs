@@ -5,10 +5,10 @@
 
 const CONFIG = {
   // --- API ---
-  TWELVE_DATA_API_KEY: PropertiesService.getScriptProperties().getProperty('TWELVE_DATA_API_KEY'),
+  ALPHA_VANTAGE_API_KEY: PropertiesService.getScriptProperties().getProperty('ALPHA_VANTAGE_API_KEY'),
   GEMINI_API_KEY: PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY'),
   
-  TWELVE_DATA_BASE_URL: 'https://api.twelvedata.com',
+  ALPHA_VANTAGE_BASE_URL: 'https://www.alphavantage.co/query',
   GEMINI_MODEL: 'gemini-1.5-flash',
 
   // --- Spreadsheet ---

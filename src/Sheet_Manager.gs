@@ -133,38 +133,83 @@ const SheetManager = {
    * Supports hybrid mode: GOOGLEFINANCE formulas + Static Values.
    * @param {Object} data Financial data object.
    */
+  /**
+   * Appends or updates a row in the Dashboard sheet.
+   * Supports hybrid mode: GOOGLEFINANCE formulas + Static Values.
+   * @param {Object} data Financial data object.
+   */
   appendDashboardRow: function(data) {
     const sheet = this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
-    const row = new Array(25).fill(''); // Initialize 25 columns
+    const ticker = data.ticker;
     
+    // GOOGLEFINANCE Formulas
+    const priceFormula = `=GOOGLEFINANCE("${ticker}", "price")`;
+    const changePctFormula = `=GOOGLEFINANCE("${ticker}", "changepct")/100`;
+    const marketCapFormula = `=GOOGLEFINANCE("${ticker}", "marketcap")`;
+    const peFormulaLive = `=GOOGLEFINANCE("${ticker}", "pe")`; // Fallback/Live PE from Google
+
+    // Calculate Formulas using Column Letters (assuming columns are fixed as per CONFIG)
+    // Price is Col B (2), Buy Price is passed in 'data'
+    // Gain/Loss % = (Price - Buy) / Buy
+    // Gain/Loss $ = (Price - Buy) * Qty
+    
+    // We need to know the ROW index we are about to append to.
+    const newRowIdx = sheet.getLastRow() + 1;
+    const priceColLetter = 'B'; // Column 2
+    
+    const buyPrice = data.buyPrice || 0;
+    const quantity = data.quantity || 0;
+    
+    const gainLossPctFormula = buyPrice > 0 
+      ? `=(${priceColLetter}${newRowIdx} - ${buyPrice}) / ${buyPrice}` 
+      : "";
+      
+    const gainLossAbsFormula = (buyPrice > 0 && quantity > 0)
+      ? `=(${priceColLetter}${newRowIdx} - ${buyPrice}) * ${quantity}`
+      : "";
+
+    // Prepare row data array (25 columns)
+    const row = new Array(25).fill('');
     const cols = CONFIG.DASHBOARD_COLS;
     
-    // Map data to column index (Column Number - 1)
-    row[cols.TICKER - 1] = data.ticker;
-    row[cols.PRICE - 1] = data.price;
-    row[cols.CHANGE_PCT - 1] = data.changePct;
-    row[cols.GAIN_LOSS_PCT - 1] = data.gainLossPct;
-    row[cols.GAIN_LOSS_ABS - 1] = data.gainLossAbs;
-    row[cols.MARKET_CAP - 1] = data.marketCap;
-    row[cols.PE - 1] = data.pe;
-    row[cols.FWD_PE - 1] = data.fwdPe;
-    row[cols.PEG - 1] = data.peg;
-    row[cols.PS - 1] = data.ps;
-    row[cols.PB - 1] = data.pb;
-    row[cols.EV_EBITDA - 1] = data.evEbitda;
-    row[cols.FCF_YIELD - 1] = data.fcfYield;
-    row[cols.GROSS_MARGIN - 1] = data.grossMargin;
-    row[cols.OP_MARGIN - 1] = data.opMargin;
-    row[cols.ROE - 1] = data.roe;
-    row[cols.ROIC - 1] = data.roic;
-    row[cols.REV_GROWTH - 1] = data.revGrowth;
-    row[cols.EPS_GROWTH - 1] = data.epsGrowth;
-    row[cols.CURRENT_RATIO - 1] = data.currentRatio;
-    row[cols.DEBT_EQUITY - 1] = data.debtEquity;
-    row[cols.RSI - 1] = data.rsi;
-    row[cols.TARGET_UPSIDE - 1] = data.targetUpside;
-    row[cols.SYSTEM_MEMO - 1] = data.systemMemo;
-    row[cols.LAST_UPDATED - 1] = Utils.formatDate(new Date());
+    // 1. Static ID Data
+    row[cols.TICKER - 1] = ticker;
+    
+    // 2. Formulas (Real-time)
+    row[cols.PRICE - 1] = priceFormula;
+    row[cols.CHANGE_PCT - 1] = changePctFormula;
+    row[cols.GAIN_LOSS_PCT - 1] = gainLossPctFormula;
+    row[cols.GAIN_LOSS_ABS - 1] = gainLossAbsFormula;
+    row[cols.MARKET_CAP - 1] = marketCapFormula;
+    
+    // 3. Alpha Vantage / Hybrid Data
+    // Use AV PE if available (from API/Cache), else fallback to Google PE formula
+    if (data.pe && data.pe !== '') {
+      row[cols.PE - 1] = data.pe;
+    } else {
+      row[cols.PE - 1] = peFormulaLive;
+    }
+    
+    row[cols.FWD_PE - 1] = data.fwdPe || '';
+    row[cols.PEG - 1] = data.peg || '';
+    row[cols.PS - 1] = data.ps || '';
+    row[cols.PB - 1] = data.pb || '';
+    row[cols.EV_EBITDA - 1] = data.evEbitda || '';
+    row[cols.FCF_YIELD - 1] = data.fcfYield || '';
+    row[cols.GROSS_MARGIN - 1] = data.grossMargin || '';
+    row[cols.OP_MARGIN - 1] = data.opMargin || '';
+    row[cols.ROE - 1] = data.roe || '';
+    row[cols.ROIC - 1] = data.roic || '';
+    row[cols.REV_GROWTH - 1] = data.revGrowth || '';
+    row[cols.EPS_GROWTH - 1] = data.epsGrowth || '';
+    row[cols.CURRENT_RATIO - 1] = data.currentRatio || '';
+    row[cols.DEBT_EQUITY - 1] = data.debtEquity || '';
+    row[cols.RSI - 1] = data.rsi || '';
+    row[cols.TARGET_UPSIDE - 1] = data.targetUpside || '';
+    row[cols.SYSTEM_MEMO - 1] = data.systemMemo || '';
+    
+    // 4. Metadata
+    row[cols.LAST_UPDATED - 1] = data.lastUpdated || Utils.formatDate(new Date());
 
     sheet.appendRow(row);
   },
