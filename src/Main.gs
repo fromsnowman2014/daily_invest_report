@@ -27,7 +27,12 @@ function updateDailyReport() {
         const buyPrice = Utils.parseFloat(stock.buyPrice);
         const financialData = FMPService.getFullFinancialData(stock.ticker, buyPrice);
         
+        // Update Dashboard
         SheetManager.appendDashboardRow(financialData);
+        
+        // Append to History Log (Log_{Ticker} sheet)
+        SheetManager.appendLogRow(stock.ticker, financialData);
+        
         Utils.log(`Processed ${stock.ticker} (Price: ${financialData.price})`);
         
         // Add small delay to avoid API rate limiting

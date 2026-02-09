@@ -121,5 +121,74 @@ const SheetManager = {
     row[cols.LAST_UPDATED - 1] = Utils.formatDate(new Date());
 
     sheet.appendRow(row);
+  },
+
+  // ==================== LOG SHEET FUNCTIONS ====================
+
+  /**
+   * Gets the log sheet name for a ticker.
+   * @param {string} ticker The stock ticker symbol.
+   * @return {string} The log sheet name (e.g., 'Log_NVDA').
+   */
+  getLogSheetName: function(ticker) {
+    return CONFIG.SHEET_NAMES.LOG_PREFIX + ticker.toUpperCase();
+  },
+
+  /**
+   * Initializes a Log sheet for a ticker with headers.
+   * Creates the sheet if it doesn't exist.
+   * @param {string} ticker The stock ticker symbol.
+   * @return {Sheet} The log sheet object.
+   */
+  initLogSheet: function(ticker) {
+    const sheetName = this.getLogSheetName(ticker);
+    const ss = this.getSpreadsheet();
+    let sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      Utils.log(`Created new log sheet: ${sheetName}`);
+      
+      // Set Header Row
+      const headers = ['Date', 'Price', 'Fwd P/E', 'PEG', 'RSI', 'System Event'];
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+    
+    return sheet;
+  },
+
+  /**
+   * Appends a daily snapshot row to a ticker's Log sheet.
+   * @param {string} ticker The stock ticker symbol.
+   * @param {Object} data The financial data object.
+   */
+  appendLogRow: function(ticker, data) {
+    const sheet = this.initLogSheet(ticker);
+    const today = Utils.formatDate(new Date());
+    
+    // Check if today's entry already exists (avoid duplicates)
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const lastDate = sheet.getRange(lastRow, 1).getValue();
+      if (Utils.formatDate(lastDate) === today) {
+        Utils.log(`Log entry for ${ticker} on ${today} already exists. Skipping.`);
+        return;
+      }
+    }
+    
+    // Build row based on CONFIG.LOG_COLS
+    const cols = CONFIG.LOG_COLS;
+    const row = new Array(6).fill('');
+    
+    row[cols.DATE - 1] = today;
+    row[cols.PRICE - 1] = data.price;
+    row[cols.FWD_PE - 1] = data.fwdPe;
+    row[cols.PEG - 1] = data.peg;
+    row[cols.RSI - 1] = data.rsi;
+    row[cols.SYSTEM_EVENT - 1] = data.systemMemo || '';
+    
+    sheet.appendRow(row);
+    Utils.log(`Appended log entry for ${ticker} on ${today}`);
   }
 };
