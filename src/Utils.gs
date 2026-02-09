@@ -50,5 +50,21 @@ const Utils = {
   calculateChange: function(current, previous) {
     if (!previous || previous === 0) return 0;
     return (current - previous) / previous;
+  },
+
+  /**
+   * Converts a 1-based column index to a spreadsheet column letter.
+   * e.g., 1→A, 26→Z, 27→AA, 28→AB
+   * @param {number} col 1-based column number.
+   * @return {string} Column letter(s).
+   */
+  colToLetter: function(col) {
+    let letter = '';
+    while (col > 0) {
+      col--;
+      letter = String.fromCharCode(65 + (col % 26)) + letter;
+      col = Math.floor(col / 26);
+    }
+    return letter;
   }
 };

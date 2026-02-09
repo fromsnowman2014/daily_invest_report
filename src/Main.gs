@@ -4,7 +4,8 @@
  *
  * Architecture: 2-Phase Update
  *   Phase 1: Write Dashboard rows (GOOGLEFINANCE formulas + API/cached fundamental data)
- *   Phase 2: Flush → read back actual values (price etc.) → write Log entries
+ *            → Add TOTAL row → Set Weight % formulas
+ *   Phase 2: Flush → read back actual values (price, market value, etc.) → write Log entries
  */
 
 // Rotation Configuration
@@ -34,7 +35,7 @@ function updateDailyReport(forceUpdateTicker = null) {
 
     let apiCallsMade = 0;
 
-    // ============ Phase 1: Write Dashboard Rows ============
+    // ============ Phase 1: Write Dashboard Stock Rows ============
     aggregated.forEach((stock) => {
       try {
         const ticker = stock.ticker;
@@ -51,18 +52,16 @@ function updateDailyReport(forceUpdateTicker = null) {
           shouldFetchApi = true;
           Utils.log(`[${ticker}] Force update requested.`);
         } else if (!cache) {
-          shouldFetchApi = true; // New stock, must fetch
+          shouldFetchApi = true;
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
           const lastUpdated = new Date(cache.lastUpdated);
           const diffTime = Math.abs(new Date() - lastUpdated);
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-          // Check if cache actually has fundamental data
           const cacheHasData = cache.fwdPe || cache.peg || cache.ps || cache.pb || cache.evEbitda;
 
           if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
-            // Cache is empty (previous API call may have failed) - force refetch
             shouldFetchApi = true;
             Utils.log(`[${ticker}] Cache has no fundamental data. Forcing API fetch.`);
           } else if (diffDays >= ROTATION_INTERVAL_DAYS) {
@@ -91,7 +90,7 @@ function updateDailyReport(forceUpdateTicker = null) {
               ps: overview.priceToSalesRatio,
               pb: overview.priceToBookRatio,
               evEbitda: overview.evToEbitda,
-              grossMargin: overview.profitMargin, // AV OVERVIEW returns ProfitMargin
+              grossMargin: overview.profitMargin,
               opMargin: overview.operatingMargin,
               roe: overview.returnOnEquity,
               revGrowth: overview.revenueGrowth,
@@ -105,24 +104,19 @@ function updateDailyReport(forceUpdateTicker = null) {
 
             apiCallsMade++;
             Utils.log(`[${ticker}] API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
-
-            // Respect 5 calls/min limit (12 seconds delay)
             Utilities.sleep(12000);
           } else {
             Utils.log(`[${ticker}] API Fetch Failed (may be ETF or invalid ticker). Falling back to cache.`);
             financialData = cache || {};
           }
         } else {
-          // Use Cached Data
           financialData = cache || {};
         }
 
-        // Ensure basic fields for appendDashboardRow
         financialData.ticker = ticker;
         financialData.buyPrice = buyPrice;
         financialData.quantity = quantity;
 
-        // Write Dashboard row (Phase 1)
         SheetManager.appendDashboardRow(financialData);
 
       } catch (stockError) {
@@ -130,12 +124,15 @@ function updateDailyReport(forceUpdateTicker = null) {
       }
     });
 
+    // Add TOTAL summary row + set Weight % formulas
+    const totalRowIdx = SheetManager.appendDashboardTotalRow(aggregated.length);
+    SheetManager.setDashboardWeightFormulas(aggregated.length, totalRowIdx);
+    Utils.log(`Dashboard complete: ${aggregated.length} stocks + TOTAL row.`);
+
     // ============ Phase 2: Flush & Write Log Entries ============
-    // Force GOOGLEFINANCE formulas to calculate
     SpreadsheetApp.flush();
     Utilities.sleep(5000); // Wait for GOOGLEFINANCE to resolve
 
-    // Read back Dashboard with actual calculated values (price, etc.)
     const freshData = SheetManager.readDashboardValues();
 
     Object.keys(freshData).forEach(ticker => {
@@ -191,7 +188,7 @@ function setupSheets() {
 }
 
 /**
- * Creates a daily trigger to run updateDailyReport at 3:15 AM.
+ * Creates a daily trigger to run updateDailyReport at 3:15 PM.
  * Run this function ONCE manually to set up the schedule.
  */
 function createTimeDrivenTrigger() {
@@ -210,6 +207,6 @@ function createTimeDrivenTrigger() {
       .nearMinute(15)
       .everyDays(1)
       .create();
-      
+
   Utils.log('Daily Trigger set for ~3:15 PM.');
 }

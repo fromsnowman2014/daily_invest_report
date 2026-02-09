@@ -7,7 +7,7 @@ const CONFIG = {
   // --- API ---
   ALPHA_VANTAGE_API_KEY: PropertiesService.getScriptProperties().getProperty('ALPHA_VANTAGE_API_KEY'),
   GEMINI_API_KEY: PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY'),
-  
+
   ALPHA_VANTAGE_BASE_URL: 'https://www.alphavantage.co/query',
   GEMINI_MODEL: 'gemini-1.5-flash',
 
@@ -25,66 +25,75 @@ const CONFIG = {
     ADD_DATE: 2,    // B
     BUY_DATE: 3,    // C
     BUY_PRICE: 4,   // D
-    QUANTITY: 5,    // E - Number of shares
+    QUANTITY: 5,    // E
     USER_MEMO: 6,   // F
     TAG: 7          // G
   },
 
-  // Dashboard Sheet
+  // Dashboard Sheet (29 columns)
   DASHBOARD_COLS: {
     TICKER: 1,           // A
     PRICE: 2,            // B
     CHANGE_PCT: 3,       // C
-    GAIN_LOSS_PCT: 4,    // D
-    GAIN_LOSS_ABS: 5,    // E
-    MARKET_CAP: 6,       // F
-    PE: 7,               // G
-    FWD_PE: 8,           // H
-    PEG: 9,              // I
-    PS: 10,              // J
-    PB: 11,              // K
-    EV_EBITDA: 12,       // L
-    FCF_YIELD: 13,       // M
-    GROSS_MARGIN: 14,    // N
-    OP_MARGIN: 15,       // O
-    ROE: 16,             // P
-    ROIC: 17,            // Q
-    REV_GROWTH: 18,      // R
-    EPS_GROWTH: 19,      // S
-    CURRENT_RATIO: 20,   // T
-    DEBT_EQUITY: 21,     // U
-    RSI: 22,             // V
-    TARGET_UPSIDE: 23,   // W
-    SYSTEM_MEMO: 24,     // X
-    LAST_UPDATED: 25     // Y
+    DAY_CHANGE_ABS: 4,   // D - Day's P&L ($)
+    COST_BASIS: 5,       // E - Total invested (AvgPrice × Qty)
+    MARKET_VALUE: 6,     // F - Current value (Price × Qty)
+    GAIN_LOSS_PCT: 7,    // G - Unrealized gain %
+    GAIN_LOSS_ABS: 8,    // H - Unrealized gain $
+    WEIGHT_PCT: 9,       // I - Portfolio allocation %
+    MARKET_CAP: 10,      // J
+    PE: 11,              // K
+    FWD_PE: 12,          // L
+    PEG: 13,             // M
+    PS: 14,              // N
+    PB: 15,              // O
+    EV_EBITDA: 16,       // P
+    FCF_YIELD: 17,       // Q
+    GROSS_MARGIN: 18,    // R
+    OP_MARGIN: 19,       // S
+    ROE: 20,             // T
+    ROIC: 21,            // U
+    REV_GROWTH: 22,      // V
+    EPS_GROWTH: 23,      // W
+    CURRENT_RATIO: 24,   // X
+    DEBT_EQUITY: 25,     // Y
+    RSI: 26,             // Z
+    TARGET_UPSIDE: 27,   // AA
+    SYSTEM_MEMO: 28,     // AB
+    LAST_UPDATED: 29     // AC
   },
+  DASHBOARD_COL_COUNT: 29,
 
-  // Log Sheet (mirrors Dashboard metrics for historical tracking)
+  // Log Sheet (28 columns - mirrors Dashboard minus Ticker/Last Updated, plus Date)
   LOG_COLS: {
-    DATE: 1,            // A
-    PRICE: 2,           // B
-    CHANGE_PCT: 3,      // C
-    GAIN_LOSS_PCT: 4,   // D
-    GAIN_LOSS_ABS: 5,   // E
-    MARKET_CAP: 6,      // F
-    PE: 7,              // G
-    FWD_PE: 8,          // H
-    PEG: 9,             // I
-    PS: 10,             // J
-    PB: 11,             // K
-    EV_EBITDA: 12,      // L
-    FCF_YIELD: 13,      // M
-    GROSS_MARGIN: 14,   // N
-    OP_MARGIN: 15,      // O
-    ROE: 16,            // P
-    ROIC: 17,           // Q
-    REV_GROWTH: 18,     // R
-    EPS_GROWTH: 19,     // S
-    CURRENT_RATIO: 20,  // T
-    DEBT_EQUITY: 21,    // U
-    RSI: 22,            // V
-    TARGET_UPSIDE: 23,  // W
-    SYSTEM_EVENT: 24    // X
+    DATE: 1,             // A
+    PRICE: 2,            // B
+    CHANGE_PCT: 3,       // C
+    DAY_CHANGE_ABS: 4,   // D
+    COST_BASIS: 5,       // E
+    MARKET_VALUE: 6,     // F
+    GAIN_LOSS_PCT: 7,    // G
+    GAIN_LOSS_ABS: 8,    // H
+    WEIGHT_PCT: 9,       // I
+    MARKET_CAP: 10,      // J
+    PE: 11,              // K
+    FWD_PE: 12,          // L
+    PEG: 13,             // M
+    PS: 14,              // N
+    PB: 15,              // O
+    EV_EBITDA: 16,       // P
+    FCF_YIELD: 17,       // Q
+    GROSS_MARGIN: 18,    // R
+    OP_MARGIN: 19,       // S
+    ROE: 20,             // T
+    ROIC: 21,            // U
+    REV_GROWTH: 22,      // V
+    EPS_GROWTH: 23,      // W
+    CURRENT_RATIO: 24,   // X
+    DEBT_EQUITY: 25,     // Y
+    RSI: 26,             // Z
+    TARGET_UPSIDE: 27,   // AA
+    SYSTEM_EVENT: 28     // AB
   },
-  LOG_COL_COUNT: 24
+  LOG_COL_COUNT: 28
 };
