@@ -188,8 +188,9 @@ function setupSheets() {
 }
 
 /**
- * Creates a daily trigger to run updateDailyReport at 3:15 PM.
+ * Creates a daily trigger to run updateDailyReport at ~3:01 PM Pacific Time.
  * Run this function ONCE manually to set up the schedule.
+ * Note: nearMinute() has ~15 min variance, so actual execution may be 2:46~3:16 PM PT.
  */
 function createTimeDrivenTrigger() {
   // Delete existing triggers to avoid duplicates
@@ -200,13 +201,14 @@ function createTimeDrivenTrigger() {
     }
   }
 
-  // Create new trigger for 3:15 PM (15:15)
+  // Create new trigger for ~3:01 PM Pacific Time
   ScriptApp.newTrigger('updateDailyReport')
       .timeBased()
       .atHour(15)
-      .nearMinute(15)
+      .nearMinute(1)
+      .inTimezone('America/Los_Angeles')
       .everyDays(1)
       .create();
 
-  Utils.log('Daily Trigger set for ~3:15 PM.');
+  Utils.log('Daily Trigger set for ~3:01 PM Pacific Time (America/Los_Angeles).');
 }

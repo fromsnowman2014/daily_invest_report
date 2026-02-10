@@ -295,7 +295,8 @@ const SheetManager = {
     const cols = CONFIG.DASHBOARD_COLS;
     const colCount = CONFIG.DASHBOARD_COL_COUNT;
     const T = stockCount + 2; // TOTAL row index (header=1, stocks=2..N+1, total=N+2)
-    const dataRange = `2:${T - 1}`; // e.g., "2:8" for 7 stocks
+    const S = 2;              // First stock row
+    const E = T - 1;          // Last stock row
 
     const cDayChange = Utils.colToLetter(cols.DAY_CHANGE_ABS);
     const cCostBasis = Utils.colToLetter(cols.COST_BASIS);
@@ -306,12 +307,12 @@ const SheetManager = {
     const row = new Array(colCount).fill('');
 
     row[cols.TICKER - 1] = 'TOTAL';
-    row[cols.DAY_CHANGE_ABS - 1] = `=SUM(${cDayChange}${dataRange})`;
-    row[cols.COST_BASIS - 1] = `=SUM(${cCostBasis}${dataRange})`;
-    row[cols.MARKET_VALUE - 1] = `=SUM(${cMktValue}${dataRange})`;
+    row[cols.DAY_CHANGE_ABS - 1] = `=SUM(${cDayChange}${S}:${cDayChange}${E})`;
+    row[cols.COST_BASIS - 1] = `=SUM(${cCostBasis}${S}:${cCostBasis}${E})`;
+    row[cols.MARKET_VALUE - 1] = `=SUM(${cMktValue}${S}:${cMktValue}${E})`;
     row[cols.GAIN_LOSS_PCT - 1] = `=IF(${cCostBasis}${T}>0,(${cMktValue}${T}-${cCostBasis}${T})/${cCostBasis}${T},"")`;
-    row[cols.GAIN_LOSS_ABS - 1] = `=SUM(${cGainAbs}${dataRange})`;
-    row[cols.WEIGHT_PCT - 1] = `=SUM(${cWeightPct}${dataRange})`;
+    row[cols.GAIN_LOSS_ABS - 1] = `=SUM(${cGainAbs}${S}:${cGainAbs}${E})`;
+    row[cols.WEIGHT_PCT - 1] = `=SUM(${cWeightPct}${S}:${cWeightPct}${E})`;
 
     sheet.appendRow(row);
 
