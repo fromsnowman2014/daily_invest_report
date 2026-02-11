@@ -15,6 +15,7 @@ const CONFIG = {
   SHEET_NAMES: {
     STOCK_LIST: 'Stock List',
     DASHBOARD: 'Dashboard',
+    DASHBOARD_BACKUP: 'Dashboard_Backup',
     LOG_PREFIX: 'Log_'
   },
 

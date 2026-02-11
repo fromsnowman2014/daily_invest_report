@@ -30,6 +30,9 @@ function updateDailyReport(forceUpdateTicker = null) {
     // 2. Read Existing Dashboard Data (Caching) - BEFORE clearing
     const cachedData = SheetManager.getDashboardData();
 
+    // 2.5. Backup Dashboard before clearing (safety net)
+    SheetManager.backupDashboard();
+
     // 3. Initialize Dashboard (Clear previous data)
     SheetManager.initDashboard();
 
@@ -146,7 +149,17 @@ function updateDailyReport(forceUpdateTicker = null) {
     Utils.log(`Daily Update Completed. Total API Calls: ${apiCallsMade}`);
 
   } catch (error) {
-    Utils.log(`Error: ${error.message}`);
+    Utils.log(`CRITICAL Error: ${error.message}. Attempting to restore Dashboard from backup...`);
+    try {
+      const restored = SheetManager.restoreDashboard();
+      if (restored) {
+        Utils.log('Dashboard successfully restored from backup after error.');
+      } else {
+        Utils.log('WARNING: Could not restore Dashboard. Check Dashboard_Backup sheet manually.');
+      }
+    } catch (restoreError) {
+      Utils.log(`Restore also failed: ${restoreError.message}. Check Dashboard_Backup sheet manually.`);
+    }
   }
 }
 
@@ -211,4 +224,18 @@ function createTimeDrivenTrigger() {
       .create();
 
   Utils.log('Daily Trigger set for ~3:01 PM Pacific Time (America/Los_Angeles).');
+}
+
+/**
+ * Manually restores Dashboard from Dashboard_Backup sheet.
+ * Run this function if data was lost and Dashboard_Backup still exists.
+ */
+function restoreDashboardManual() {
+  Utils.log('Manual Dashboard restore requested...');
+  const restored = SheetManager.restoreDashboard();
+  if (restored) {
+    Utils.log('Dashboard successfully restored from Dashboard_Backup.');
+  } else {
+    Utils.log('No valid backup found. Cannot restore.');
+  }
 }

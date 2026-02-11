@@ -461,5 +461,72 @@ const SheetManager = {
       sheet.appendRow(rowData);
       Utils.log(`Appended new log entry for ${ticker} on ${today}`);
     }
+  },
+
+  // ==================== BACKUP / RESTORE ====================
+
+  /**
+   * Creates a full backup of the Dashboard sheet before clearing.
+   * Copies the entire sheet (values, formulas, formatting) to Dashboard_Backup.
+   * If Dashboard_Backup already exists, it is replaced.
+   */
+  backupDashboard: function() {
+    const ss = this.getSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log('Dashboard is empty. Skipping backup.');
+      return;
+    }
+
+    // Delete existing backup sheet if it exists
+    const existingBackup = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD_BACKUP);
+    if (existingBackup) {
+      ss.deleteSheet(existingBackup);
+      Utils.log('Deleted previous Dashboard_Backup.');
+    }
+
+    // Copy Dashboard → Dashboard_Backup
+    const backupSheet = dashboard.copyTo(ss);
+    backupSheet.setName(CONFIG.SHEET_NAMES.DASHBOARD_BACKUP);
+
+    // Move backup sheet to end to keep it out of the way
+    ss.setActiveSheet(backupSheet);
+    ss.moveActiveSheet(ss.getNumSheets());
+
+    Utils.log(`Dashboard backed up to "${CONFIG.SHEET_NAMES.DASHBOARD_BACKUP}" (${dashboard.getLastRow()} rows).`);
+  },
+
+  /**
+   * Restores Dashboard from Dashboard_Backup.
+   * Used when updateDailyReport fails mid-execution.
+   * @return {boolean} True if restore succeeded, false if no backup found.
+   */
+  restoreDashboard: function() {
+    const ss = this.getSpreadsheet();
+    const backup = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD_BACKUP);
+
+    if (!backup || backup.getLastRow() < 2) {
+      Utils.log('No valid backup found. Cannot restore.');
+      return false;
+    }
+
+    // Clear current Dashboard
+    const dashboard = this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
+    dashboard.clear();
+
+    // Copy all data from backup
+    const lastRow = backup.getLastRow();
+    const lastCol = backup.getLastColumn();
+
+    if (lastRow > 0 && lastCol > 0) {
+      const data = backup.getRange(1, 1, lastRow, lastCol).getValues();
+      dashboard.getRange(1, 1, lastRow, lastCol).setValues(data);
+      dashboard.setFrozenRows(1);
+      dashboard.getRange(1, 1, 1, lastCol).setFontWeight('bold');
+    }
+
+    Utils.log(`Dashboard restored from backup (${lastRow} rows).`);
+    return true;
   }
 };
