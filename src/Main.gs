@@ -12,6 +12,25 @@
 const ROTATION_INTERVAL_DAYS = 7;
 const MAX_DAILY_API_CALLS = 20; // Safe limit below 25
 
+/**
+ * Creates the Daily Invest Report menu on open.
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Daily Invest Report')
+      .addItem('📈 Graph Active Column', 'createHistoryChart')
+      .addSeparator()
+      .addItem('Restore Dashboard Manually', 'restoreDashboardManual')
+      .addToUi();
+}
+
+/**
+ * Wrapper for ChartManager.createHistoryChart to be called from menu.
+ */
+function createHistoryChart() {
+  ChartManager.createHistoryChart();
+}
+
 function updateDailyReport(forceUpdateTicker = null) {
   Utils.log('Starting Daily Invest Report Update (Hybrid Strategy)...');
 
@@ -130,6 +149,9 @@ function updateDailyReport(forceUpdateTicker = null) {
     // Add TOTAL summary row + set Weight % formulas
     const totalRowIdx = SheetManager.appendDashboardTotalRow(aggregated.length);
     SheetManager.setDashboardWeightFormulas(aggregated.length, totalRowIdx);
+    
+
+    
     Utils.log(`Dashboard complete: ${aggregated.length} stocks + TOTAL row.`);
 
     // ============ Phase 2: Flush & Write Log Entries ============

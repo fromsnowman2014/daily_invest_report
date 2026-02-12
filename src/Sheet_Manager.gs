@@ -69,14 +69,15 @@ const SheetManager = {
    * Returns Dashboard header labels (matches DASHBOARD_COLS order).
    */
   getDashboardHeaders: function() {
+
     return [
-      'Ticker', 'Price', 'Change %', 'Day Change $',
-      'Cost Basis', 'Market Value', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
-      'Market Cap', 'P/E', 'Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield',
-      'Gross Margin', 'Op Margin', 'ROE', 'ROIC',
-      'Rev Growth', 'EPS Growth',
+      'Ticker', 'Price $', 'Change %', 'Day Change $',
+      'Cost Basis $', 'Market Value $', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
+      'Market Cap $', 'P/E', 'Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
+      'Gross Margin %', 'Op Margin %', 'ROE %', 'ROIC %',
+      'Rev Growth %', 'EPS Growth %',
       'Current Ratio', 'Debt/Equity',
-      'RSI', 'Target Upside',
+      'RSI', 'Target Upside %',
       'System Memo', 'Last Updated'
     ];
   },
@@ -188,14 +189,21 @@ const SheetManager = {
 
   /**
    * Initializes or Clears the Dashboard sheet structure.
+   * @param {Sheet} [targetSheet] Optional sheet object to initialize (for testing).
    */
-  initDashboard: function() {
-    const sheet = this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
+  initDashboard: function(targetSheet) {
+    const sheet = targetSheet || this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
     sheet.clear();
 
     const headers = this.getDashboardHeaders();
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    
+    // Freeze 1 row and 1 column
     sheet.setFrozenRows(1);
+    sheet.setFrozenColumns(1);
+    
+    // Apply formatting to the empty sheet (pre-formatting columns)
+    this.applyColumnFormats(sheet);
   },
 
   /**
@@ -341,6 +349,110 @@ const SheetManager = {
     }
   },
 
+  /**
+   * Applies custom number formatting and conditional formatting to Dashboard columns.
+   * 1. Market Cap (Col J): Shortened billions/millions.
+   * 2. Conditional Formatting (Blue > 0, Red < 0): Change %, Day Change $, Gain/Loss %, Gain/Loss $.
+   * @param {Sheet} [targetSheet] Optional sheet object to format (for testing).
+   */
+  /**
+   * Applies custom number formatting and conditional formatting to columns.
+   * Universal format for Dashboard and Log sheets (since column indices match for these fields).
+   * 1. Market Cap (Col J): Shortened billions/millions.
+   * 2. Conditional Formatting (Blue > 0, Red < 0): Change %, Day Change $, Gain/Loss %, Gain/Loss $.
+   *
+   * @param {Sheet} [targetSheet] Optional sheet object. If null, defaults to Dashboard.
+   */
+  applyColumnFormats: function(targetSheet) {
+    const sheet = targetSheet || this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
+    const maxRows = sheet.getMaxRows();
+    
+    if (maxRows < 2) return;
+
+    const cols = CONFIG.DASHBOARD_COLS; // Indices match LOG_COLS for these specific fields
+    const numRows = maxRows - 1;
+    
+    // --- 1. Number Formatting ---
+    
+    // 1a. Market Cap Format: [<999950]$0.0,"K";[<999950000]$0.0,,"M";$0.0,,,"B"
+    // Apply to range J2:J(lastRow)
+    const marketCapRange = sheet.getRange(2, cols.MARKET_CAP, numRows, 1);
+    marketCapRange.setNumberFormat('[<999950]$0.0,"K";[<999950000]$0.0,,"M";$0.0,,,"B"');
+
+    // 1b. Currency Format: $#,##0.00
+    // Columns: Price, Day Change $, Cost Basis, Market Value, Gain/Loss $
+    const currencyCols = [
+      cols.PRICE,
+      cols.DAY_CHANGE_ABS,
+      cols.COST_BASIS,
+      cols.MARKET_VALUE,
+      cols.GAIN_LOSS_ABS
+    ];
+    
+    currencyCols.forEach(colIndex => {
+      sheet.getRange(2, colIndex, numRows, 1).setNumberFormat('$#,##0.00');
+    });
+
+    // 1c. Percent Format: 0.00%
+    // Columns: Change %, Gain/Loss %, Weight %, FCF Yield, Gross Margin, Op Margin, ROE, ROIC, Rev Growth, EPS Growth, Target Upside
+    const percentCols = [
+      cols.CHANGE_PCT,
+      cols.GAIN_LOSS_PCT,
+      cols.WEIGHT_PCT,
+      cols.FCF_YIELD,
+      cols.GROSS_MARGIN,
+      cols.OP_MARGIN,
+      cols.ROE,
+      cols.ROIC,
+      cols.REV_GROWTH,
+      cols.EPS_GROWTH,
+      cols.TARGET_UPSIDE
+    ];
+    
+    percentCols.forEach(colIndex => {
+      sheet.getRange(2, colIndex, numRows, 1).setNumberFormat('0.00%');
+    });
+    
+    // --- 2. Conditional Formatting ---
+    // Columns to format: Change %, Day Change $, Gain/Loss %, Gain/Loss $
+    const targetCols = [
+      cols.CHANGE_PCT,
+      cols.DAY_CHANGE_ABS,
+      cols.GAIN_LOSS_PCT,
+      cols.GAIN_LOSS_ABS
+    ];
+    
+    // Clear existing rules to avoid duplicates
+    sheet.clearConditionalFormatRules();
+    
+    const rules = [];
+    
+    targetCols.forEach(colIndex => {
+      const range = sheet.getRange(2, colIndex, numRows, 1);
+      
+      // Rule 1: Greater than 0 -> Light Blue (#cfe2f3)
+      const positiveRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenNumberGreaterThan(0)
+        .setBackground('#cfe2f3')
+        .setRanges([range])
+        .build();
+        
+      // Rule 2: Less than 0 -> Light Red (#f4cccc)
+      const negativeRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenNumberLessThan(0)
+        .setBackground('#f4cccc')
+        .setRanges([range])
+        .build();
+        
+      rules.push(positiveRule);
+      rules.push(negativeRule);
+    });
+    
+    sheet.setConditionalFormatRules(rules);
+
+    // Utils.log(`Applied formats to ${sheet.getName()}`);
+  },
+
   // ==================== LOG SHEET FUNCTIONS ====================
 
   /**
@@ -355,13 +467,13 @@ const SheetManager = {
    */
   getLogHeaders: function() {
     return [
-      'Date', 'Price', 'Change %', 'Day Change $',
-      'Cost Basis', 'Market Value', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
-      'Market Cap', 'P/E', 'Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield',
-      'Gross Margin', 'Op Margin', 'ROE', 'ROIC',
-      'Rev Growth', 'EPS Growth',
+      'Date', 'Price $', 'Change %', 'Day Change $',
+      'Cost Basis $', 'Market Value $', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
+      'Market Cap $', 'P/E', 'Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
+      'Gross Margin %', 'Op Margin %', 'ROE %', 'ROIC %',
+      'Rev Growth %', 'EPS Growth %',
       'Current Ratio', 'Debt/Equity',
-      'RSI', 'Target Upside',
+      'RSI', 'Target Upside %',
       'System Event'
     ];
   },
@@ -385,13 +497,22 @@ const SheetManager = {
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
       sheet.setFrozenRows(1);
     } else {
-      // Auto-migrate: update headers if column count changed
-      const currentHeaderCount = sheet.getLastColumn();
-      if (currentHeaderCount < headers.length) {
+      // Update headers if they differ (auto-update existing sheets)
+      const currentHeaders = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+      const headersChanged = JSON.stringify(currentHeaders) !== JSON.stringify(headers);
+      
+      if (headersChanged) {
         sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
-        Utils.log(`Migrated log sheet headers for ${sheetName} (${currentHeaderCount} → ${headers.length} cols)`);
+        Utils.log(`Updated log sheet headers for ${sheetName}`);
       }
     }
+    
+    // Ensure frozen panes: 1 row, 1 column
+    sheet.setFrozenRows(1);
+    sheet.setFrozenColumns(1);
+    
+    // Apply Formatting (applies to existing sheets too)
+    this.applyColumnFormats(sheet);
 
     return sheet;
   },
