@@ -67,3 +67,53 @@ function runTests() {
     Utils.log('Test Complete. Sheet left for inspection: ' + testSheetName);
   }
 }
+
+/**
+ * Debug function to test interactions between Formatting and GOOGLEFINANCE.
+ */
+function debugGoogleFinance() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'Debug_GF_' + new Date().getTime();
+  let sheet = ss.insertSheet(sheetName);
+  
+  try {
+    Utils.log('Starting Debug on ' + sheetName);
+    const ticker = "AGNC";
+    
+    // Test 1: Write Formula THEN Format (Known to cause issues?)
+    sheet.getRange(1, 1).setValue("Test 1: Formula -> Format");
+    sheet.getRange(2, 1).setFormula(`=GOOGLEFINANCE("${ticker}", "price")`);
+    SpreadsheetApp.flush(); // Force calc?
+    sheet.getRange(2, 1).setNumberFormat('0,##0.00');
+    Utils.log('Test 1 complete.');
+    
+    // Test 2: Format THEN Write Formula (Current Approach)
+    sheet.getRange(4, 1).setValue("Test 2: Format -> Formula");
+    // Format a large range to simulate load
+    sheet.getRange(5, 1, 100, 1).setNumberFormat('0,##0.00');
+    sheet.getRange(5, 1).setFormula(`=GOOGLEFINANCE("${ticker}", "price")`);
+    Utils.log('Test 2 complete.');
+    
+    // Test 3: Mixed Format (Date + Currency) to see logic
+    sheet.getRange(7, 1).setValue("Test 3: Mixed");
+    sheet.getRange(8, 1).setNumberFormat('@'); // Text
+    sheet.getRange(8, 1).setFormula(`=GOOGLEFINANCE("${ticker}", "price")`);
+    // Does it stay as text or number?
+    
+    // Test 4: Full Dashboard Simulation (Mini)
+    const cols = CONFIG.DASHBOARD_COLS;
+    // Apply formats to 1000 rows
+    const maxRows = 1000;
+    const marketCapRange = sheet.getRange(11, 2, maxRows, 1);
+    marketCapRange.setNumberFormat('[<999950]/bin/zsh.0,"K";[<999950000]/bin/zsh.0,,"M";/bin/zsh.0,,,"B"');
+    
+    // Write formula
+    sheet.getRange(11, 2).setFormula(`=GOOGLEFINANCE("${ticker}", "marketcap")`);
+    Utils.log('Test 4 (Load Sim) complete.');
+
+    // Cleanup
+    // ss.deleteSheet(sheet); 
+  } catch (e) {
+    Utils.log('DEBUG ERROR: ' + e.message);
+  }
+}

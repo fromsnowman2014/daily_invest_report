@@ -190,8 +190,9 @@ const SheetManager = {
   /**
    * Initializes or Clears the Dashboard sheet structure.
    * @param {Sheet} [targetSheet] Optional sheet object to initialize (for testing).
+   * @param {number} [expectedRows] Optional number of rows to format (optimization).
    */
-  initDashboard: function(targetSheet) {
+  initDashboard: function(targetSheet, expectedRows) {
     const sheet = targetSheet || this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
     sheet.clear();
 
@@ -203,7 +204,7 @@ const SheetManager = {
     sheet.setFrozenColumns(1);
     
     // Apply formatting to the empty sheet (pre-formatting columns)
-    this.applyColumnFormats(sheet);
+    this.applyColumnFormats(sheet, expectedRows);
   },
 
   /**
@@ -362,15 +363,19 @@ const SheetManager = {
    * 2. Conditional Formatting (Blue > 0, Red < 0): Change %, Day Change $, Gain/Loss %, Gain/Loss $.
    *
    * @param {Sheet} [targetSheet] Optional sheet object. If null, defaults to Dashboard.
+   * @param {number} [numRowsToFormat] Optional number of rows to format. If null, uses maxRows.
    */
-  applyColumnFormats: function(targetSheet) {
+  applyColumnFormats: function(targetSheet, numRowsToFormat) {
     const sheet = targetSheet || this.ensureSheet(CONFIG.SHEET_NAMES.DASHBOARD);
     const maxRows = sheet.getMaxRows();
     
-    if (maxRows < 2) return;
+    // If specific row count provided, use it (clipped to maxRows). Else use whole sheet.
+    const effectiveMaxRow = numRowsToFormat ? Math.min(numRowsToFormat + 1, maxRows) : maxRows;
+    
+    if (effectiveMaxRow < 2) return;
 
     const cols = CONFIG.DASHBOARD_COLS; // Indices match LOG_COLS for these specific fields
-    const numRows = maxRows - 1;
+    const numRows = effectiveMaxRow - 1;
     
     // --- 1. Number Formatting ---
     

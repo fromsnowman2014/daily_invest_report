@@ -52,8 +52,9 @@ function updateDailyReport(forceUpdateTicker = null) {
     // 2.5. Backup Dashboard before clearing (safety net)
     SheetManager.backupDashboard();
 
-    // 3. Initialize Dashboard (Clear previous data)
-    SheetManager.initDashboard();
+    // 3. Initialize Dashboard (Clear previous data + Pre-format rows)
+    // Optimization: Only format the rows we need (stocks + total + buffer)
+    SheetManager.initDashboard(null, aggregated.length + 5);
 
     let apiCallsMade = 0;
 
