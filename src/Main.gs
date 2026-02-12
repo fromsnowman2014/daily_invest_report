@@ -237,7 +237,16 @@ function createTimeDrivenTrigger() {
     }
   }
 
-  // Create new trigger for ~3:01 PM Pacific Time
+  // Create trigger for ~6:31 AM Pacific Time
+  ScriptApp.newTrigger('updateDailyReport')
+      .timeBased()
+      .atHour(6)
+      .nearMinute(31)
+      .inTimezone('America/Los_Angeles')
+      .everyDays(1)
+      .create();
+
+  // Create trigger for ~3:01 PM Pacific Time
   ScriptApp.newTrigger('updateDailyReport')
       .timeBased()
       .atHour(15)
@@ -246,7 +255,7 @@ function createTimeDrivenTrigger() {
       .everyDays(1)
       .create();
 
-  Utils.log('Daily Trigger set for ~3:01 PM Pacific Time (America/Los_Angeles).');
+  Utils.log('Daily Triggers set for ~6:31 AM and ~3:01 PM Pacific Time (America/Los_Angeles).');
 }
 
 /**
