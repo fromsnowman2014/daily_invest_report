@@ -495,29 +495,34 @@ const SheetManager = {
     const ss = this.getSpreadsheet();
     let sheet = ss.getSheetByName(sheetName);
     const headers = this.getLogHeaders();
+    let needsFormatting = false;
 
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
       Utils.log(`Created new log sheet: ${sheetName}`);
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
       sheet.setFrozenRows(1);
+      needsFormatting = true;
     } else {
       // Update headers if they differ (auto-update existing sheets)
       const currentHeaders = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
       const headersChanged = JSON.stringify(currentHeaders) !== JSON.stringify(headers);
-      
+
       if (headersChanged) {
         sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
         Utils.log(`Updated log sheet headers for ${sheetName}`);
+        needsFormatting = true;
       }
     }
-    
+
     // Ensure frozen panes: 1 row, 1 column
     sheet.setFrozenRows(1);
     sheet.setFrozenColumns(1);
-    
-    // Apply Formatting (applies to existing sheets too)
-    this.applyColumnFormats(sheet);
+
+    // Apply formatting only when sheet is new or headers changed (performance optimization)
+    if (needsFormatting) {
+      this.applyColumnFormats(sheet);
+    }
 
     return sheet;
   },
@@ -593,7 +598,7 @@ const SheetManager = {
 
   /**
    * Creates a full backup of the Dashboard sheet before clearing.
-   * Copies the entire sheet (values, formulas, formatting) to Dashboard_Backup.
+   * Copies VALUES ONLY (not formulas) to avoid doubling GOOGLEFINANCE load.
    * If Dashboard_Backup already exists, it is replaced.
    */
   backupDashboard: function() {
@@ -612,15 +617,23 @@ const SheetManager = {
       Utils.log('Deleted previous Dashboard_Backup.');
     }
 
-    // Copy Dashboard → Dashboard_Backup
-    const backupSheet = dashboard.copyTo(ss);
-    backupSheet.setName(CONFIG.SHEET_NAMES.DASHBOARD_BACKUP);
+    // Copy Dashboard values (not formulas) to prevent GOOGLEFINANCE rate limiting
+    const lastRow = dashboard.getLastRow();
+    const lastCol = dashboard.getLastColumn();
+
+    const backupSheet = ss.insertSheet(CONFIG.SHEET_NAMES.DASHBOARD_BACKUP);
+    const values = dashboard.getRange(1, 1, lastRow, lastCol).getValues();
+    backupSheet.getRange(1, 1, lastRow, lastCol).setValues(values);
+
+    // Copy basic formatting
+    backupSheet.setFrozenRows(1);
+    backupSheet.getRange(1, 1, 1, lastCol).setFontWeight('bold');
 
     // Move backup sheet to end to keep it out of the way
     ss.setActiveSheet(backupSheet);
     ss.moveActiveSheet(ss.getNumSheets());
 
-    Utils.log(`Dashboard backed up to "${CONFIG.SHEET_NAMES.DASHBOARD_BACKUP}" (${dashboard.getLastRow()} rows).`);
+    Utils.log(`Dashboard backed up to "${CONFIG.SHEET_NAMES.DASHBOARD_BACKUP}" (${lastRow} rows, values only).`);
   },
 
   /**

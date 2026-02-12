@@ -157,7 +157,7 @@ function updateDailyReport(forceUpdateTicker = null) {
 
     // ============ Phase 2: Flush & Write Log Entries ============
     SpreadsheetApp.flush();
-    Utilities.sleep(5000); // Wait for GOOGLEFINANCE to resolve
+    Utilities.sleep(10000); // Wait 10s for GOOGLEFINANCE to resolve (rate limit safe)
 
     const freshData = SheetManager.readDashboardValues();
 
