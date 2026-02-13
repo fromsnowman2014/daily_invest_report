@@ -316,6 +316,7 @@ const SheetManager = {
     const row = new Array(colCount).fill('');
 
     row[cols.TICKER - 1] = 'TOTAL';
+    row[cols.CHANGE_PCT - 1] = `=IF(${cMktValue}${T}<>0,${cDayChange}${T}/${cMktValue}${T},"")`;
     row[cols.DAY_CHANGE_ABS - 1] = `=SUM(${cDayChange}${S}:${cDayChange}${E})`;
     row[cols.COST_BASIS - 1] = `=SUM(${cCostBasis}${S}:${cCostBasis}${E})`;
     row[cols.MARKET_VALUE - 1] = `=SUM(${cMktValue}${S}:${cMktValue}${E})`;
