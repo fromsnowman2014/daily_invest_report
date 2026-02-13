@@ -154,7 +154,7 @@ const SheetManager = {
         };
         result[ticker] = {
           price: toNum(row[cols.PRICE - 1]),
-          changePct: toNum(row[cols.CHANGE_PCT - 1]),
+          changePct: toNum(row[cols.3 - 1]),
           dayChangeAbs: toNum(row[cols.DAY_CHANGE_ABS - 1]),
           costBasis: toNum(row[cols.COST_BASIS - 1]),
           marketValue: toNum(row[cols.MARKET_VALUE - 1]),
