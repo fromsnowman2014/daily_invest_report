@@ -67,18 +67,43 @@ const SheetManager = {
 
   /**
    * Returns Dashboard header labels (matches DASHBOARD_COLS order).
+   * IMPORTANT: Must have exactly 33 columns matching CONFIG.DASHBOARD_COLS
    */
   getDashboardHeaders: function() {
-
     return [
-      'Ticker', 'Price $', 'Change %', 'Day Change $',
-      'Cost Basis $', 'Market Value $', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
-      'Market Cap $', 'P/E', 'Today P/E', 'EPS', 'Fwd P/E', 'Today Fwd P/E', 'Fwd EPS', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
-      'Gross Margin %', 'Op Margin %', 'ROE %', 'ROIC %',
-      'Rev Growth %', 'EPS Growth %',
-      'Current Ratio', 'Debt/Equity',
-      'RSI', 'Target Upside %',
-      'System Memo', 'Last Updated'
+      'Ticker',           // 1  - A
+      'Price $',          // 2  - B
+      'Change %',         // 3  - C
+      'Day Change $',     // 4  - D
+      'Cost Basis $',     // 5  - E
+      'Market Value $',   // 6  - F
+      'Gain/Loss %',      // 7  - G
+      'Gain/Loss $',      // 8  - H
+      'Weight %',         // 9  - I
+      'Market Cap $',     // 10 - J
+      'P/E',              // 11 - K
+      'Today P/E',        // 12 - L
+      'EPS',              // 13 - M
+      'Fwd P/E',          // 14 - N
+      'Today Fwd P/E',    // 15 - O
+      'Fwd EPS',          // 16 - P
+      'PEG',              // 17 - Q
+      'P/S',              // 18 - R
+      'P/B',              // 19 - S
+      'EV/EBITDA',        // 20 - T
+      'FCF Yield %',      // 21 - U
+      'Gross Margin %',   // 22 - V
+      'Op Margin %',      // 23 - W
+      'ROE %',            // 24 - X
+      'ROIC %',           // 25 - Y
+      'Rev Growth %',     // 26 - Z
+      'EPS Growth %',     // 27 - AA
+      'Current Ratio',    // 28 - AB
+      'Debt/Equity',      // 29 - AC
+      'RSI',              // 30 - AD
+      'Target Upside %',  // 31 - AE
+      'System Memo',      // 32 - AF
+      'Last Updated'      // 33 - AG
     ];
   },
 
@@ -497,17 +522,41 @@ const SheetManager = {
 
   /**
    * Returns Log sheet headers (matches LOG_COLS order).
+   * IMPORTANT: Must have exactly 30 columns matching CONFIG.LOG_COLS
+   * Note: Log sheets don't store EPS or Fwd EPS (only calculated P/E values)
    */
   getLogHeaders: function() {
     return [
-      'Date', 'Price $', 'Change %', 'Day Change $',
-      'Cost Basis $', 'Market Value $', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
-      'Market Cap $', 'P/E', 'Today P/E', 'Fwd P/E', 'Today Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
-      'Gross Margin %', 'Op Margin %', 'ROE %', 'ROIC %',
-      'Rev Growth %', 'EPS Growth %',
-      'Current Ratio', 'Debt/Equity',
-      'RSI', 'Target Upside %',
-      'System Event'
+      'Date',             // 1  - A
+      'Price $',          // 2  - B
+      'Change %',         // 3  - C
+      'Day Change $',     // 4  - D
+      'Cost Basis $',     // 5  - E
+      'Market Value $',   // 6  - F
+      'Gain/Loss %',      // 7  - G
+      'Gain/Loss $',      // 8  - H
+      'Weight %',         // 9  - I
+      'Market Cap $',     // 10 - J
+      'P/E',              // 11 - K
+      'Today P/E',        // 12 - L
+      'Fwd P/E',          // 13 - M
+      'Today Fwd P/E',    // 14 - N
+      'PEG',              // 15 - O
+      'P/S',              // 16 - P
+      'P/B',              // 17 - Q
+      'EV/EBITDA',        // 18 - R
+      'FCF Yield %',      // 19 - S
+      'Gross Margin %',   // 20 - T
+      'Op Margin %',      // 21 - U
+      'ROE %',            // 22 - V
+      'ROIC %',           // 23 - W
+      'Rev Growth %',     // 24 - X
+      'EPS Growth %',     // 25 - Y
+      'Current Ratio',    // 26 - Z
+      'Debt/Equity',      // 27 - AA
+      'RSI',              // 28 - AB
+      'Target Upside %',  // 29 - AC
+      'System Event'      // 30 - AD
     ];
   },
 

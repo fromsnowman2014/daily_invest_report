@@ -1,6 +1,9 @@
 /**
  * Diagnostic_Fix.gs
- * Diagnoses and fixes Dashboard column structure issues.
+ * Diagnostic and verification tools for Dashboard structure.
+ *
+ * NOTE: After refactoring, headers are now properly defined in Sheet_Manager.gs.
+ * These functions are mainly for verification and emergency fixes.
  */
 
 /**
@@ -286,6 +289,59 @@ function diagnoseAndFix() {
 
   Utils.log(`\n\n=== All Fixes Applied ===`);
   Utils.log(`You can now run updateDailyReport() to populate data.`);
+}
+
+/**
+ * Verifies that header arrays match the expected column counts.
+ * Run this after any code changes to ensure consistency.
+ */
+function verifyHeaderConsistency() {
+  Utils.log('=== Verifying Header Array Consistency ===');
+
+  const dashboardHeaders = SheetManager.getDashboardHeaders();
+  const logHeaders = SheetManager.getLogHeaders();
+
+  Utils.log(`\nDashboard Headers:`);
+  Utils.log(`  Expected: ${CONFIG.DASHBOARD_COL_COUNT} columns`);
+  Utils.log(`  Actual:   ${dashboardHeaders.length} columns`);
+
+  if (dashboardHeaders.length === CONFIG.DASHBOARD_COL_COUNT) {
+    Utils.log(`  ✅ MATCH!`);
+  } else {
+    Utils.log(`  ❌ MISMATCH! Difference: ${dashboardHeaders.length - CONFIG.DASHBOARD_COL_COUNT}`);
+  }
+
+  Utils.log(`\nLog Headers:`);
+  Utils.log(`  Expected: ${CONFIG.LOG_COL_COUNT} columns`);
+  Utils.log(`  Actual:   ${logHeaders.length} columns`);
+
+  if (logHeaders.length === CONFIG.LOG_COL_COUNT) {
+    Utils.log(`  ✅ MATCH!`);
+  } else {
+    Utils.log(`  ❌ MISMATCH! Difference: ${logHeaders.length - CONFIG.LOG_COL_COUNT}`);
+  }
+
+  // Show key columns
+  Utils.log(`\nKey Dashboard Columns (positions 11-16):`);
+  for (let i = 10; i < 16 && i < dashboardHeaders.length; i++) {
+    Utils.log(`  [${i + 1}] ${dashboardHeaders[i]}`);
+  }
+
+  Utils.log(`\nKey Log Columns (positions 11-14):`);
+  for (let i = 10; i < 14 && i < logHeaders.length; i++) {
+    Utils.log(`  [${i + 1}] ${logHeaders[i]}`);
+  }
+
+  Utils.log(`\n=== Verification Complete ===`);
+
+  if (dashboardHeaders.length === CONFIG.DASHBOARD_COL_COUNT &&
+      logHeaders.length === CONFIG.LOG_COL_COUNT) {
+    Utils.log(`✅ All header arrays are consistent!`);
+    return true;
+  } else {
+    Utils.log(`❌ Header arrays have mismatches. Check Sheet_Manager.gs.`);
+    return false;
+  }
 }
 
 /**
