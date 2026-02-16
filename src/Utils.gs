@@ -66,5 +66,67 @@ const Utils = {
       col = Math.floor(col / 26);
     }
     return letter;
+  },
+
+  /**
+   * Checks if the US stock market is open today by analyzing GOOGLEFINANCE data.
+   * Strategy: Compare current Dashboard Change % values across multiple tickers.
+   * If all Change % values are 0, null, or error, market is likely closed.
+   *
+   * @param {Object} dashboardData Map of ticker -> data from readDashboardValues()
+   * @return {boolean} True if market appears to be open (data has changed), false if closed.
+   */
+  isMarketOpenToday: function(dashboardData) {
+    if (!dashboardData || Object.keys(dashboardData).length === 0) {
+      this.log('No dashboard data available. Assuming market is closed.');
+      return false;
+    }
+
+    const tickers = Object.keys(dashboardData);
+    let validChangeCount = 0;
+    let totalChecked = 0;
+
+    // Check up to 5 tickers to avoid false positives
+    const tickersToCheck = tickers.slice(0, Math.min(5, tickers.length));
+
+    for (const ticker of tickersToCheck) {
+      const data = dashboardData[ticker];
+      totalChecked++;
+
+      // Check if Change % exists and is a valid number
+      if (data.changePct !== null &&
+          data.changePct !== undefined &&
+          typeof data.changePct === 'number' &&
+          !isNaN(data.changePct)) {
+        validChangeCount++;
+
+        // If any ticker has non-zero change, market is definitely open
+        if (Math.abs(data.changePct) > 0.00001) {
+          this.log(`Market detected as OPEN (${ticker} has change: ${(data.changePct * 100).toFixed(2)}%)`);
+          return true;
+        }
+      }
+    }
+
+    // If we have valid change data but all are exactly 0, it's ambiguous
+    // Check the current day of week as additional signal
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      this.log('Market detected as CLOSED (Weekend detected)');
+      return false;
+    }
+
+    // If all checked tickers have 0% change on a weekday, likely pre-market or no movement
+    // In this case, we should still update logs (it's a trading day, just no movement yet)
+    if (validChangeCount === totalChecked && validChangeCount > 0) {
+      this.log('Market detected as OPEN (Weekday with valid data, zero movement is normal)');
+      return true;
+    }
+
+    // If no valid data retrieved (all null/undefined), market is likely closed or GOOGLEFINANCE error
+    this.log(`Market detected as CLOSED (No valid change data: ${validChangeCount}/${totalChecked} valid)`);
+    return false;
   }
 };

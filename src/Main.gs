@@ -161,6 +161,18 @@ function updateDailyReport(forceUpdateTicker = null) {
 
     const freshData = SheetManager.readDashboardValues();
 
+    // Check if market is open before updating logs
+    const isMarketOpen = Utils.isMarketOpenToday(freshData);
+
+    if (!isMarketOpen) {
+      Utils.log('Market is CLOSED today. Skipping Log_ticker updates.');
+      Utils.log(`Dashboard Update Completed (Log updates skipped). Total API Calls: ${apiCallsMade}`);
+      return;
+    }
+
+    // Market is open - proceed with Log updates
+    Utils.log('Market is OPEN. Proceeding with Log_ticker updates...');
+
     Object.keys(freshData).forEach(ticker => {
       try {
         SheetManager.appendLogRow(ticker, freshData[ticker]);
