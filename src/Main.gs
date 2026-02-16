@@ -108,6 +108,7 @@ function updateDailyReport(forceUpdateTicker = null) {
               buyPrice: buyPrice,
               quantity: quantity,
               pe: overview.peRatio,
+              eps: overview.dilutedEPSTTM || overview.eps,  // Use diluted EPS (more accurate), fallback to basic EPS
               fwdPe: overview.forwardPE,
               peg: overview.pegRatio,
               ps: overview.priceToSalesRatio,
@@ -126,8 +127,28 @@ function updateDailyReport(forceUpdateTicker = null) {
             };
 
             apiCallsMade++;
-            Utils.log(`[${ticker}] API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
+            Utils.log(`[${ticker}] Overview API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
             Utilities.sleep(12000);
+
+            // Try to fetch Forward EPS from Earnings API (if we have API calls remaining)
+            if (apiCallsMade < MAX_DAILY_API_CALLS) {
+              try {
+                const forwardEPS = AlphaVantageService.getForwardEPS(ticker);
+                if (forwardEPS && forwardEPS > 0) {
+                  financialData.forwardEPS = forwardEPS;
+                  apiCallsMade++;
+                  Utils.log(`[${ticker}] Earnings API Call Successful. Forward EPS: ${forwardEPS.toFixed(2)} (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
+                  Utilities.sleep(12000);
+                } else {
+                  Utils.log(`[${ticker}] No Forward EPS available. Today Fwd P/E will be empty.`);
+                }
+              } catch (earningsError) {
+                Utils.log(`[${ticker}] Earnings API Error: ${earningsError.message}. Skipping Forward EPS.`);
+              }
+            } else {
+              Utils.log(`[${ticker}] API limit reached. Skipping Earnings API call.`);
+            }
+
           } else {
             Utils.log(`[${ticker}] API Fetch Failed (may be ETF or invalid ticker). Falling back to cache.`);
             financialData = cache || {};
@@ -282,4 +303,157 @@ function restoreDashboardManual() {
   } else {
     Utils.log('No valid backup found. Cannot restore.');
   }
+}
+
+/**
+ * Migrates Dashboard and all Log sheets to add Today P/E column.
+ * Run this ONCE after updating code to add the new column.
+ * Inserts Today P/E column after P/E (position L).
+ */
+function migrateAddTodayPE() {
+  Utils.log('=== Starting Today P/E Column Migration ===');
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. Migrate Dashboard
+  const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+  if (dashboard) {
+    Utils.log('Migrating Dashboard...');
+
+    // Insert column at position 12 (after K=P/E, before current L=Fwd P/E)
+    dashboard.insertColumnAfter(11); // Insert after column K
+
+    // Set header
+    dashboard.getRange(1, 12).setValue('Today P/E').setFontWeight('bold');
+
+    // Add GOOGLEFINANCE formula for each stock row
+    const lastRow = dashboard.getLastRow();
+    if (lastRow >= 2) {
+      for (let row = 2; row <= lastRow; row++) {
+        const ticker = dashboard.getRange(row, 1).getValue();
+        if (ticker && ticker !== 'TOTAL' && ticker !== '') {
+          const formula = `=GOOGLEFINANCE("${ticker}","pe")`;
+          dashboard.getRange(row, 12).setFormula(formula);
+        }
+      }
+    }
+
+    Utils.log('Dashboard migration complete.');
+  } else {
+    Utils.log('Dashboard sheet not found. Skipping.');
+  }
+
+  // 2. Migrate all Log sheets
+  const sheets = ss.getSheets();
+  let logCount = 0;
+
+  for (const sheet of sheets) {
+    const sheetName = sheet.getName();
+    if (sheetName.startsWith(CONFIG.SHEET_NAMES.LOG_PREFIX)) {
+      Utils.log(`Migrating ${sheetName}...`);
+
+      // Insert column at position 12 (after K=P/E, before current L=Fwd P/E)
+      sheet.insertColumnAfter(11);
+
+      // Set header
+      sheet.getRange(1, 12).setValue('Today P/E').setFontWeight('bold');
+
+      logCount++;
+    }
+  }
+
+  Utils.log(`=== Migration Complete ===`);
+  Utils.log(`Dashboard: Updated`);
+  Utils.log(`Log sheets: ${logCount} updated`);
+  Utils.log('Please run updateDailyReport() to populate Today P/E values in logs.');
+}
+
+/**
+ * Migrates Dashboard and all Log sheets to add Today Fwd P/E and Fwd EPS columns.
+ * Run this ONCE after updating code to add the new columns.
+ * Inserts Today Fwd P/E (column N) and Fwd EPS (column O) after Fwd P/E (column M).
+ */
+function migrateAddTodayFwdPE() {
+  Utils.log('=== Starting Today Fwd P/E & Fwd EPS Column Migration ===');
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. Migrate Dashboard
+  const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+  if (dashboard) {
+    Utils.log('Migrating Dashboard...');
+
+    // Insert 2 columns after M (Fwd P/E)
+    // Column 13 = M (Fwd P/E)
+    dashboard.insertColumnAfter(13); // Insert column N (Today Fwd P/E)
+    dashboard.insertColumnAfter(14); // Insert column O (Fwd EPS)
+
+    // Set headers
+    dashboard.getRange(1, 14).setValue('Today Fwd P/E').setFontWeight('bold');
+    dashboard.getRange(1, 15).setValue('Fwd EPS').setFontWeight('bold');
+
+    // Note: Today Fwd P/E formula will be auto-generated on next updateDailyReport()
+    // based on Fwd EPS value in column O
+
+    Utils.log('Dashboard migration complete.');
+  } else {
+    Utils.log('Dashboard sheet not found. Skipping.');
+  }
+
+  // 2. Migrate all Log sheets
+  const sheets = ss.getSheets();
+  let logCount = 0;
+
+  for (const sheet of sheets) {
+    const sheetName = sheet.getName();
+    if (sheetName.startsWith(CONFIG.SHEET_NAMES.LOG_PREFIX)) {
+      Utils.log(`Migrating ${sheetName}...`);
+
+      // Insert 1 column after M (Fwd P/E) for Today Fwd P/E
+      // Note: Log sheets don't store Fwd EPS, only the calculated Today Fwd P/E value
+      sheet.insertColumnAfter(13);
+
+      // Set header
+      sheet.getRange(1, 14).setValue('Today Fwd P/E').setFontWeight('bold');
+
+      logCount++;
+    }
+  }
+
+  Utils.log(`=== Migration Complete ===`);
+  Utils.log(`Dashboard: Updated (added Today Fwd P/E and Fwd EPS columns)`);
+  Utils.log(`Log sheets: ${logCount} updated (added Today Fwd P/E column)`);
+  Utils.log('Please run updateDailyReport() to populate Forward EPS and Today Fwd P/E values.');
+}
+
+/**
+ * Migrates Dashboard to add EPS column after Today P/E (position M).
+ * Run this ONCE after updating code to improve Today P/E calculation.
+ * Inserts EPS column after L (Today P/E).
+ */
+function migrateAddEPS() {
+  Utils.log('=== Starting EPS Column Migration (for Today P/E improvement) ===');
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Migrate Dashboard only (Log sheets don't store EPS)
+  const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+  if (dashboard) {
+    Utils.log('Migrating Dashboard...');
+
+    // Insert 1 column after L (Today P/E)
+    // Column 12 = L (Today P/E)
+    dashboard.insertColumnAfter(12); // Insert column M (EPS)
+
+    // Set header
+    dashboard.getRange(1, 13).setValue('EPS').setFontWeight('bold');
+
+    Utils.log('Dashboard migration complete.');
+    Utils.log('EPS column added at position M (after Today P/E).');
+  } else {
+    Utils.log('Dashboard sheet not found. Skipping.');
+  }
+
+  Utils.log(`=== Migration Complete ===`);
+  Utils.log('Please run updateDailyReport() to populate EPS values and update Today P/E formulas.');
 }

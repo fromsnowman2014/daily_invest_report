@@ -73,7 +73,7 @@ const SheetManager = {
     return [
       'Ticker', 'Price $', 'Change %', 'Day Change $',
       'Cost Basis $', 'Market Value $', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
-      'Market Cap $', 'P/E', 'Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
+      'Market Cap $', 'P/E', 'Today P/E', 'EPS', 'Fwd P/E', 'Today Fwd P/E', 'Fwd EPS', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
       'Gross Margin %', 'Op Margin %', 'ROE %', 'ROIC %',
       'Rev Growth %', 'EPS Growth %',
       'Current Ratio', 'Debt/Equity',
@@ -104,7 +104,9 @@ const SheetManager = {
         dashboardMap[ticker] = {
           price: row[cols.PRICE - 1],
           pe: row[cols.PE - 1],
+          eps: row[cols.EPS - 1],
           fwdPe: row[cols.FWD_PE - 1],
+          forwardEPS: row[cols.FWD_EPS - 1],
           peg: row[cols.PEG - 1],
           ps: row[cols.PS - 1],
           pb: row[cols.PB - 1],
@@ -154,7 +156,7 @@ const SheetManager = {
         };
         result[ticker] = {
           price: toNum(row[cols.PRICE - 1]),
-          changePct: toNum(row[cols.3 - 1]),
+          changePct: toNum(row[cols.CHANGE_PCT - 1]),
           dayChangeAbs: toNum(row[cols.DAY_CHANGE_ABS - 1]),
           costBasis: toNum(row[cols.COST_BASIS - 1]),
           marketValue: toNum(row[cols.MARKET_VALUE - 1]),
@@ -163,7 +165,9 @@ const SheetManager = {
           weightPct: toNum(row[cols.WEIGHT_PCT - 1]),
           marketCap: toNum(row[cols.MARKET_CAP - 1]),
           pe: toNum(row[cols.PE - 1]),
+          todayPe: toNum(row[cols.TODAY_PE - 1]),
           fwdPe: toNum(row[cols.FWD_PE - 1]),
+          todayFwdPe: toNum(row[cols.TODAY_FWD_PE - 1]),
           peg: toNum(row[cols.PEG - 1]),
           ps: toNum(row[cols.PS - 1]),
           pb: toNum(row[cols.PB - 1]),
@@ -271,7 +275,31 @@ const SheetManager = {
       row[cols.PE - 1] = peFormulaLive;
     }
 
+    // Today P/E: Real-time P/E = Price / EPS
+    // EPS is stored in column M for reference
+    if (data.eps && data.eps > 0) {
+      const cEPS = Utils.colToLetter(cols.EPS);
+      row[cols.TODAY_PE - 1] = `=${cPrice}${R}/${cEPS}${R}`;
+      row[cols.EPS - 1] = data.eps;
+    } else {
+      // Fallback to GOOGLEFINANCE if no EPS available
+      row[cols.TODAY_PE - 1] = peFormulaLive;
+      row[cols.EPS - 1] = '';
+    }
+
     row[cols.FWD_PE - 1] = v(data.fwdPe);
+
+    // Today Fwd P/E: Real-time Forward P/E = Price / Forward EPS
+    // Forward EPS is stored in column O for reference
+    if (data.forwardEPS && data.forwardEPS > 0) {
+      const cFwdEPS = Utils.colToLetter(cols.FWD_EPS);
+      row[cols.TODAY_FWD_PE - 1] = `=${cPrice}${R}/${cFwdEPS}${R}`;
+      row[cols.FWD_EPS - 1] = data.forwardEPS;
+    } else {
+      row[cols.TODAY_FWD_PE - 1] = '';
+      row[cols.FWD_EPS - 1] = '';
+    }
+
     row[cols.PEG - 1] = v(data.peg);
     row[cols.PS - 1] = v(data.ps);
     row[cols.PB - 1] = v(data.pb);
@@ -474,7 +502,7 @@ const SheetManager = {
     return [
       'Date', 'Price $', 'Change %', 'Day Change $',
       'Cost Basis $', 'Market Value $', 'Gain/Loss %', 'Gain/Loss $', 'Weight %',
-      'Market Cap $', 'P/E', 'Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
+      'Market Cap $', 'P/E', 'Today P/E', 'Fwd P/E', 'Today Fwd P/E', 'PEG', 'P/S', 'P/B', 'EV/EBITDA', 'FCF Yield %',
       'Gross Margin %', 'Op Margin %', 'ROE %', 'ROIC %',
       'Rev Growth %', 'EPS Growth %',
       'Current Ratio', 'Debt/Equity',
@@ -553,7 +581,9 @@ const SheetManager = {
     rowData[cols.WEIGHT_PCT - 1] = v(data.weightPct);
     rowData[cols.MARKET_CAP - 1] = v(data.marketCap);
     rowData[cols.PE - 1] = v(data.pe);
+    rowData[cols.TODAY_PE - 1] = v(data.todayPe);
     rowData[cols.FWD_PE - 1] = v(data.fwdPe);
+    rowData[cols.TODAY_FWD_PE - 1] = v(data.todayFwdPe);
     rowData[cols.PEG - 1] = v(data.peg);
     rowData[cols.PS - 1] = v(data.ps);
     rowData[cols.PB - 1] = v(data.pb);

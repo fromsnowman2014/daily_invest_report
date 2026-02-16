@@ -97,5 +97,84 @@ const AlphaVantageService = {
       sharesOutstanding: Utils.parseFloat(data.SharesOutstanding),
       marketCapitalization: Utils.parseFloat(data.MarketCapitalization)
     };
+  },
+
+  /**
+   * Fetches earnings data including quarterly estimates.
+   * Consumes 1 API call.
+   * Returns quarterly earnings with analyst estimates for future quarters.
+   * @param {string} ticker The stock ticker symbol.
+   * @return {Object} Earnings data with quarterlyEarnings array.
+   */
+  getEarnings: function(ticker) {
+    const data = this.fetchAPI('EARNINGS', { symbol: ticker });
+    if (!data) return {};
+
+    return {
+      ticker: data.symbol,
+      quarterlyEarnings: data.quarterlyEarnings || []
+    };
+  },
+
+  /**
+   * Calculates Forward EPS (next 4 quarters estimated EPS sum).
+   * Uses EARNINGS API data to sum up analyst estimates.
+   * @param {string} ticker The stock ticker symbol.
+   * @return {number|null} Forward EPS or null if unavailable.
+   */
+  getForwardEPS: function(ticker) {
+    try {
+      const earnings = this.getEarnings(ticker);
+
+      if (!earnings.quarterlyEarnings || earnings.quarterlyEarnings.length === 0) {
+        Utils.log(`[${ticker}] No quarterly earnings data available.`);
+        return null;
+      }
+
+      const today = new Date();
+      let forwardEPS = 0;
+      let count = 0;
+
+      // Sort by fiscalDateEnding to get most recent first
+      const sorted = earnings.quarterlyEarnings.sort((a, b) => {
+        return new Date(b.fiscalDateEnding) - new Date(a.fiscalDateEnding);
+      });
+
+      // Sum up next 4 quarters' estimated EPS
+      for (const quarter of sorted) {
+        if (count >= 4) break;
+
+        const fiscalDate = new Date(quarter.fiscalDateEnding);
+
+        // Only include future or very recent quarters (within last 3 months)
+        const threeMonthsAgo = new Date();
+        threeMonthsAgo.setMonth(today.getMonth() - 3);
+
+        if (fiscalDate >= threeMonthsAgo) {
+          // Try to get estimated EPS, fallback to reported EPS
+          const estimatedEPS = Utils.parseFloat(quarter.estimatedEPS);
+          const reportedEPS = Utils.parseFloat(quarter.reportedEPS);
+
+          const epsValue = estimatedEPS || reportedEPS;
+
+          if (epsValue !== null) {
+            forwardEPS += epsValue;
+            count++;
+          }
+        }
+      }
+
+      if (count === 0) {
+        Utils.log(`[${ticker}] No valid forward earnings estimates found.`);
+        return null;
+      }
+
+      Utils.log(`[${ticker}] Forward EPS calculated: ${forwardEPS.toFixed(2)} (from ${count} quarters)`);
+      return forwardEPS;
+
+    } catch (error) {
+      Utils.log(`[${ticker}] Error calculating Forward EPS: ${error.message}`);
+      return null;
+    }
   }
 };
