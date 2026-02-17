@@ -123,31 +123,41 @@ const SheetManager = {
     const cols = CONFIG.DASHBOARD_COLS;
     const dashboardMap = {};
 
+    // Helper: Convert empty strings to null, keep numbers and valid values
+    const toValue = function(val) {
+      // If it's a number (including 0), keep it
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      // If it's empty string, return null
+      if (val === '' || val == null) return null;
+      // Otherwise return the value (for strings like dates, memos)
+      return val;
+    };
+
     data.forEach(row => {
       const ticker = row[cols.TICKER - 1];
       if (ticker && ticker !== 'TOTAL') {
         dashboardMap[ticker] = {
-          price: row[cols.PRICE - 1],
-          pe: row[cols.PE - 1],
-          eps: row[cols.EPS - 1],
-          fwdPe: row[cols.FWD_PE - 1],
-          forwardEPS: row[cols.FWD_EPS - 1],
-          peg: row[cols.PEG - 1],
-          ps: row[cols.PS - 1],
-          pb: row[cols.PB - 1],
-          evEbitda: row[cols.EV_EBITDA - 1],
-          fcfYield: row[cols.FCF_YIELD - 1],
-          grossMargin: row[cols.GROSS_MARGIN - 1],
-          opMargin: row[cols.OP_MARGIN - 1],
-          roe: row[cols.ROE - 1],
-          roic: row[cols.ROIC - 1],
-          revGrowth: row[cols.REV_GROWTH - 1],
-          epsGrowth: row[cols.EPS_GROWTH - 1],
-          currentRatio: row[cols.CURRENT_RATIO - 1],
-          debtEquity: row[cols.DEBT_EQUITY - 1],
-          rsi: row[cols.RSI - 1],
-          targetUpside: row[cols.TARGET_UPSIDE - 1],
-          systemMemo: row[cols.SYSTEM_MEMO - 1],
+          price: toValue(row[cols.PRICE - 1]),
+          pe: toValue(row[cols.PE - 1]),
+          eps: toValue(row[cols.EPS - 1]),
+          fwdPe: toValue(row[cols.FWD_PE - 1]),
+          forwardEPS: toValue(row[cols.FWD_EPS - 1]),
+          peg: toValue(row[cols.PEG - 1]),
+          ps: toValue(row[cols.PS - 1]),
+          pb: toValue(row[cols.PB - 1]),
+          evEbitda: toValue(row[cols.EV_EBITDA - 1]),
+          fcfYield: toValue(row[cols.FCF_YIELD - 1]),
+          grossMargin: toValue(row[cols.GROSS_MARGIN - 1]),
+          opMargin: toValue(row[cols.OP_MARGIN - 1]),
+          roe: toValue(row[cols.ROE - 1]),
+          roic: toValue(row[cols.ROIC - 1]),
+          revGrowth: toValue(row[cols.REV_GROWTH - 1]),
+          epsGrowth: toValue(row[cols.EPS_GROWTH - 1]),
+          currentRatio: toValue(row[cols.CURRENT_RATIO - 1]),
+          debtEquity: toValue(row[cols.DEBT_EQUITY - 1]),
+          rsi: toValue(row[cols.RSI - 1]),
+          targetUpside: toValue(row[cols.TARGET_UPSIDE - 1]),
+          systemMemo: row[cols.SYSTEM_MEMO - 1] || '',
           lastUpdated: row[cols.LAST_UPDATED - 1]
         };
       }
@@ -302,27 +312,44 @@ const SheetManager = {
 
     // Today P/E: Real-time P/E = Price / EPS
     // EPS is stored in column M for reference
+    // DEBUG: Log EPS evaluation
+    Utils.log(`  🔍 [appendDashboardRow] ${ticker} - EPS Evaluation:`);
+    Utils.log(`    - data.eps: ${data.eps} (${typeof data.eps})`);
+    Utils.log(`    - Condition (data.eps && data.eps > 0): ${!!(data.eps && data.eps > 0)}`);
+
     if (data.eps && data.eps > 0) {
       const cEPS = Utils.colToLetter(cols.EPS);
       row[cols.TODAY_PE - 1] = `=${cPrice}${R}/${cEPS}${R}`;
       row[cols.EPS - 1] = data.eps;
+      Utils.log(`    - ✅ Setting EPS in column M: ${data.eps}`);
+      Utils.log(`    - ✅ Setting Today P/E formula in column L: =${cPrice}${R}/${cEPS}${R}`);
     } else {
       // Fallback to GOOGLEFINANCE if no EPS available
       row[cols.TODAY_PE - 1] = peFormulaLive;
       row[cols.EPS - 1] = '';
+      Utils.log(`    - ⚠️ EPS condition failed. Column M will be empty.`);
+      Utils.log(`    - Using GOOGLEFINANCE P/E fallback for column L`);
     }
 
     row[cols.FWD_PE - 1] = v(data.fwdPe);
 
     // Today Fwd P/E: Real-time Forward P/E = Price / Forward EPS
-    // Forward EPS is stored in column O for reference
+    // Forward EPS is stored in column P for reference
+    // DEBUG: Log Forward EPS evaluation
+    Utils.log(`  🔍 [appendDashboardRow] ${ticker} - Forward EPS Evaluation:`);
+    Utils.log(`    - data.forwardEPS: ${data.forwardEPS} (${typeof data.forwardEPS})`);
+    Utils.log(`    - Condition (data.forwardEPS && data.forwardEPS > 0): ${!!(data.forwardEPS && data.forwardEPS > 0)}`);
+
     if (data.forwardEPS && data.forwardEPS > 0) {
       const cFwdEPS = Utils.colToLetter(cols.FWD_EPS);
       row[cols.TODAY_FWD_PE - 1] = `=${cPrice}${R}/${cFwdEPS}${R}`;
       row[cols.FWD_EPS - 1] = data.forwardEPS;
+      Utils.log(`    - ✅ Setting Fwd EPS in column P: ${data.forwardEPS}`);
+      Utils.log(`    - ✅ Setting Today Fwd P/E formula in column O: =${cPrice}${R}/${cFwdEPS}${R}`);
     } else {
       row[cols.TODAY_FWD_PE - 1] = '';
       row[cols.FWD_EPS - 1] = '';
+      Utils.log(`    - ⚠️ Forward EPS condition failed. Columns O and P will be empty.`);
     }
 
     row[cols.PEG - 1] = v(data.peg);
