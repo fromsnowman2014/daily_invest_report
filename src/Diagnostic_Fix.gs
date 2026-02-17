@@ -345,6 +345,191 @@ function verifyHeaderConsistency() {
 }
 
 /**
+ * DEBUG: Test API call for a specific ticker to diagnose EPS/Forward EPS issues.
+ * This function manually calls the API and logs every step of the data flow.
+ *
+ * @param {string} ticker Ticker symbol to test (default: 'AGNC')
+ */
+function debugApiCallForTicker(ticker = 'AGNC') {
+  Utils.log(`=== DEBUG: API Call Test for ${ticker} ===`);
+
+  try {
+    // Step 1: Get current cache data
+    Utils.log(`\n[STEP 1] Reading current cache data...`);
+    const cachedData = SheetManager.getDashboardData();
+    const cache = cachedData[ticker];
+
+    if (cache) {
+      Utils.log(`  ✓ Cache found for ${ticker}:`);
+      Utils.log(`    - lastUpdated: ${cache.lastUpdated}`);
+      Utils.log(`    - eps: ${cache.eps}`);
+      Utils.log(`    - forwardEPS: ${cache.forwardEPS}`);
+      Utils.log(`    - pe: ${cache.pe}`);
+      Utils.log(`    - fwdPe: ${cache.fwdPe}`);
+    } else {
+      Utils.log(`  ℹ No cache found for ${ticker}`);
+    }
+
+    // Step 2: Call Alpha Vantage Overview API
+    Utils.log(`\n[STEP 2] Calling AlphaVantageService.getCompanyOverview("${ticker}")...`);
+    const overview = AlphaVantageService.getCompanyOverview(ticker);
+
+    if (!overview) {
+      Utils.log(`  ❌ API returned null/undefined`);
+      return;
+    }
+
+    if (!overview.ticker) {
+      Utils.log(`  ❌ API response missing ticker field`);
+      Utils.log(`  Full response: ${JSON.stringify(overview, null, 2)}`);
+      return;
+    }
+
+    Utils.log(`  ✓ API call successful. Ticker: ${overview.ticker}`);
+
+    // Step 3: Inspect EPS-related fields
+    Utils.log(`\n[STEP 3] Inspecting EPS-related fields in API response:`);
+    Utils.log(`  - overview.dilutedEPSTTM: ${overview.dilutedEPSTTM} (${typeof overview.dilutedEPSTTM})`);
+    Utils.log(`  - overview.eps: ${overview.eps} (${typeof overview.eps})`);
+    Utils.log(`  - overview.peRatio: ${overview.peRatio} (${typeof overview.peRatio})`);
+    Utils.log(`  - overview.forwardPE: ${overview.forwardPE} (${typeof overview.forwardPE})`);
+
+    // Step 4: Simulate financialData construction
+    Utils.log(`\n[STEP 4] Simulating financialData construction...`);
+    const financialData = {
+      ticker: ticker,
+      buyPrice: 10.00, // dummy value
+      quantity: 100,   // dummy value
+      pe: overview.peRatio,
+      eps: overview.dilutedEPSTTM || overview.eps,
+      fwdPe: overview.forwardPE,
+      peg: overview.pegRatio,
+      ps: overview.priceToSalesRatio,
+      pb: overview.priceToBookRatio,
+      evEbitda: overview.evToEbitda
+    };
+
+    Utils.log(`  Constructed financialData.eps: ${financialData.eps} (${typeof financialData.eps})`);
+    Utils.log(`  Condition (data.eps && data.eps > 0): ${!!(financialData.eps && financialData.eps > 0)}`);
+
+    // Step 5: Call Earnings API for Forward EPS
+    Utils.log(`\n[STEP 5] Calling AlphaVantageService.getForwardEPS("${ticker}")...`);
+    Utilities.sleep(12000); // Rate limit
+
+    try {
+      const forwardEPS = AlphaVantageService.getForwardEPS(ticker);
+      Utils.log(`  ✓ Earnings API call successful`);
+      Utils.log(`  - forwardEPS: ${forwardEPS} (${typeof forwardEPS})`);
+      Utils.log(`  - Condition (forwardEPS && forwardEPS > 0): ${!!(forwardEPS && forwardEPS > 0)}`);
+
+      if (forwardEPS && forwardEPS > 0) {
+        financialData.forwardEPS = forwardEPS;
+        Utils.log(`  ✓ Set financialData.forwardEPS: ${financialData.forwardEPS}`);
+      } else {
+        Utils.log(`  ⚠ Forward EPS is null, 0, or negative. Not setting.`);
+      }
+    } catch (earningsError) {
+      Utils.log(`  ❌ Earnings API error: ${earningsError.message}`);
+      Utils.log(`  Stack: ${earningsError.stack}`);
+    }
+
+    // Step 6: Show final financialData object
+    Utils.log(`\n[STEP 6] Final financialData object:`);
+    Utils.log(JSON.stringify(financialData, null, 2));
+
+    // Step 7: Test appendDashboardRow logic
+    Utils.log(`\n[STEP 7] Testing appendDashboardRow logic...`);
+    Utils.log(`  This would populate:`);
+    Utils.log(`    - Column M (EPS): ${financialData.eps && financialData.eps > 0 ? financialData.eps : '(empty)'}`);
+    Utils.log(`    - Column L (Today P/E): ${financialData.eps && financialData.eps > 0 ? '=B/M formula' : 'GOOGLEFINANCE formula'}`);
+    Utils.log(`    - Column P (Fwd EPS): ${financialData.forwardEPS && financialData.forwardEPS > 0 ? financialData.forwardEPS : '(empty)'}`);
+    Utils.log(`    - Column O (Today Fwd P/E): ${financialData.forwardEPS && financialData.forwardEPS > 0 ? '=B/P formula' : '(empty)'}`);
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack trace: ${error.stack}`);
+  }
+
+  Utils.log(`\n=== DEBUG Complete ===`);
+  Utils.log(`\nRECOMMENDATIONS:`);
+  Utils.log(`1. Check if API returned valid EPS values`);
+  Utils.log(`2. Verify Alpha Vantage API key has quota remaining`);
+  Utils.log(`3. Check if ticker "${ticker}" is valid and has fundamental data`);
+  Utils.log(`4. If EPS is coming as string, may need type conversion in Main.gs`);
+}
+
+/**
+ * DEBUG: Inspect current Dashboard data for a specific ticker.
+ * Shows what's actually stored in the Dashboard sheet.
+ *
+ * @param {string} ticker Ticker symbol to inspect (default: 'AGNC')
+ */
+function debugDashboardDataForTicker(ticker = 'AGNC') {
+  Utils.log(`=== DEBUG: Dashboard Data Inspection for ${ticker} ===`);
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+  if (!dashboard) {
+    Utils.log(`❌ Dashboard sheet not found!`);
+    return;
+  }
+
+  const lastRow = dashboard.getLastRow();
+  if (lastRow < 2) {
+    Utils.log(`ℹ Dashboard is empty (no data rows)`);
+    return;
+  }
+
+  // Find the row for this ticker
+  const tickers = dashboard.getRange(2, 1, lastRow - 1, 1).getValues();
+  let targetRow = -1;
+
+  for (let i = 0; i < tickers.length; i++) {
+    if (tickers[i][0] === ticker) {
+      targetRow = i + 2; // +2 because row 1 is header, array is 0-indexed
+      break;
+    }
+  }
+
+  if (targetRow === -1) {
+    Utils.log(`❌ Ticker "${ticker}" not found in Dashboard`);
+    return;
+  }
+
+  Utils.log(`✓ Found ${ticker} at row ${targetRow}`);
+
+  // Read the entire row
+  const cols = CONFIG.DASHBOARD_COLS;
+  const data = dashboard.getRange(targetRow, 1, 1, dashboard.getLastColumn()).getValues()[0];
+
+  Utils.log(`\n[KEY COLUMNS]:`);
+  Utils.log(`  A - Ticker: "${data[cols.TICKER - 1]}"`);
+  Utils.log(`  B - Price: ${data[cols.PRICE - 1]}`);
+  Utils.log(`  K - P/E: ${data[cols.PE - 1]}`);
+  Utils.log(`  L - Today P/E: ${data[cols.TODAY_PE - 1]}`);
+  Utils.log(`  M - EPS: ${data[cols.EPS - 1]} ${data[cols.EPS - 1] ? '✓' : '❌'}`);
+  Utils.log(`  N - Fwd P/E: ${data[cols.FWD_PE - 1]}`);
+  Utils.log(`  O - Today Fwd P/E: ${data[cols.TODAY_FWD_PE - 1]}`);
+  Utils.log(`  P - Fwd EPS: ${data[cols.FWD_EPS - 1]} ${data[cols.FWD_EPS - 1] ? '✓' : '❌'}`);
+  Utils.log(`  AG - Last Updated: ${data[cols.LAST_UPDATED - 1]}`);
+
+  // Check if values are formulas
+  Utils.log(`\n[FORMULA CHECK]:`);
+  const formulaL = dashboard.getRange(targetRow, cols.TODAY_PE).getFormula();
+  const formulaM = dashboard.getRange(targetRow, cols.EPS).getFormula();
+  const formulaO = dashboard.getRange(targetRow, cols.TODAY_FWD_PE).getFormula();
+  const formulaP = dashboard.getRange(targetRow, cols.FWD_EPS).getFormula();
+
+  Utils.log(`  L (Today P/E): ${formulaL ? formulaL : '(not a formula, value: ' + data[cols.TODAY_PE - 1] + ')'}`);
+  Utils.log(`  M (EPS): ${formulaM ? formulaM : '(not a formula, value: ' + data[cols.EPS - 1] + ')'}`);
+  Utils.log(`  O (Today Fwd P/E): ${formulaO ? formulaO : '(not a formula, value: ' + data[cols.TODAY_FWD_PE - 1] + ')'}`);
+  Utils.log(`  P (Fwd EPS): ${formulaP ? formulaP : '(not a formula, value: ' + data[cols.FWD_EPS - 1] + ')'}`);
+
+  Utils.log(`\n=== Inspection Complete ===`);
+}
+
+/**
  * FORCE FIX: Directly updates Dashboard headers regardless of column count.
  * Use this when Dashboard has wrong headers despite having correct column count.
  */

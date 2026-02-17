@@ -78,24 +78,29 @@ function updateDailyReport(forceUpdateTicker = null) {
           shouldFetchApi = true;
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
-          const lastUpdated = new Date(cache.lastUpdated);
-          const diffTime = Math.abs(new Date() - lastUpdated);
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          // Check if cache has ANY fundamental data (including EPS and Forward EPS)
+          const cacheHasData = cache.eps || cache.fwdPe || cache.forwardEPS || cache.peg || cache.ps || cache.pb || cache.evEbitda;
 
-          const cacheHasData = cache.fwdPe || cache.peg || cache.ps || cache.pb || cache.evEbitda;
-
+          // Priority 1: If cache has NO fundamental data, fetch immediately (regardless of age)
           if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
             shouldFetchApi = true;
             Utils.log(`[${ticker}] Cache has no fundamental data. Forcing API fetch.`);
-          } else if (diffDays >= ROTATION_INTERVAL_DAYS) {
-            if (apiCallsMade < MAX_DAILY_API_CALLS) {
-              shouldFetchApi = true;
-              Utils.log(`[${ticker}] Data expired (${diffDays} days). Scheduled for update.`);
-            } else {
-              Utils.log(`[${ticker}] Update needed but daily limit reached. Using cache.`);
-            }
           } else {
-            Utils.log(`[${ticker}] Data fresh enough (${diffDays} days). Using cache.`);
+            // Priority 2: Check data age only if cache has data
+            const lastUpdated = new Date(cache.lastUpdated);
+            const diffTime = Math.abs(new Date() - lastUpdated);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays >= ROTATION_INTERVAL_DAYS) {
+              if (apiCallsMade < MAX_DAILY_API_CALLS) {
+                shouldFetchApi = true;
+                Utils.log(`[${ticker}] Data expired (${diffDays} days). Scheduled for update.`);
+              } else {
+                Utils.log(`[${ticker}] Update needed but daily limit reached. Using cache.`);
+              }
+            } else {
+              Utils.log(`[${ticker}] Data fresh enough (${diffDays} days). Using cache.`);
+            }
           }
         }
 
@@ -103,6 +108,13 @@ function updateDailyReport(forceUpdateTicker = null) {
         if (shouldFetchApi) {
           const overview = AlphaVantageService.getCompanyOverview(ticker);
           if (overview && overview.ticker) {
+            // DEBUG: Log raw API response for EPS fields
+            Utils.log(`[${ticker}] 🔍 DEBUG - Raw API Response:`);
+            Utils.log(`  - dilutedEPSTTM: ${overview.dilutedEPSTTM} (${typeof overview.dilutedEPSTTM})`);
+            Utils.log(`  - eps: ${overview.eps} (${typeof overview.eps})`);
+            Utils.log(`  - peRatio: ${overview.peRatio} (${typeof overview.peRatio})`);
+            Utils.log(`  - forwardPE: ${overview.forwardPE} (${typeof overview.forwardPE})`);
+
             financialData = {
               ticker: ticker,
               buyPrice: buyPrice,
@@ -126,6 +138,10 @@ function updateDailyReport(forceUpdateTicker = null) {
               ...overview
             };
 
+            // DEBUG: Log constructed EPS value
+            Utils.log(`  - Constructed financialData.eps: ${financialData.eps} (${typeof financialData.eps})`);
+            Utils.log(`  - Condition check (eps && eps > 0): ${!!(financialData.eps && financialData.eps > 0)}`);
+
             apiCallsMade++;
             Utils.log(`[${ticker}] Overview API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
             Utilities.sleep(12000);
@@ -133,17 +149,25 @@ function updateDailyReport(forceUpdateTicker = null) {
             // Try to fetch Forward EPS from Earnings API (if we have API calls remaining)
             if (apiCallsMade < MAX_DAILY_API_CALLS) {
               try {
+                Utils.log(`[${ticker}] 🔍 DEBUG - Calling getForwardEPS()...`);
                 const forwardEPS = AlphaVantageService.getForwardEPS(ticker);
+
+                // DEBUG: Log raw Forward EPS response
+                Utils.log(`  - Raw forwardEPS: ${forwardEPS} (${typeof forwardEPS})`);
+                Utils.log(`  - Condition check (forwardEPS && forwardEPS > 0): ${!!(forwardEPS && forwardEPS > 0)}`);
+
                 if (forwardEPS && forwardEPS > 0) {
                   financialData.forwardEPS = forwardEPS;
                   apiCallsMade++;
-                  Utils.log(`[${ticker}] Earnings API Call Successful. Forward EPS: ${forwardEPS.toFixed(2)} (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
+                  Utils.log(`[${ticker}] ✅ Earnings API Call Successful. Forward EPS: ${forwardEPS.toFixed(2)} (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
+                  Utils.log(`  - Set financialData.forwardEPS: ${financialData.forwardEPS}`);
                   Utilities.sleep(12000);
                 } else {
-                  Utils.log(`[${ticker}] No Forward EPS available. Today Fwd P/E will be empty.`);
+                  Utils.log(`[${ticker}] ⚠️ No Forward EPS available (value: ${forwardEPS}). Today Fwd P/E will be empty.`);
                 }
               } catch (earningsError) {
-                Utils.log(`[${ticker}] Earnings API Error: ${earningsError.message}. Skipping Forward EPS.`);
+                Utils.log(`[${ticker}] ❌ Earnings API Error: ${earningsError.message}. Skipping Forward EPS.`);
+                Utils.log(`  Stack: ${earningsError.stack}`);
               }
             } else {
               Utils.log(`[${ticker}] API limit reached. Skipping Earnings API call.`);
@@ -160,6 +184,13 @@ function updateDailyReport(forceUpdateTicker = null) {
         financialData.ticker = ticker;
         financialData.buyPrice = buyPrice;
         financialData.quantity = quantity;
+
+        // DEBUG: Log final financialData before passing to appendDashboardRow
+        Utils.log(`[${ticker}] 🔍 DEBUG - Final financialData before appendDashboardRow:`);
+        Utils.log(`  - eps: ${financialData.eps} (${typeof financialData.eps})`);
+        Utils.log(`  - forwardEPS: ${financialData.forwardEPS} (${typeof financialData.forwardEPS})`);
+        Utils.log(`  - pe: ${financialData.pe}`);
+        Utils.log(`  - fwdPe: ${financialData.fwdPe}`);
 
         SheetManager.appendDashboardRow(financialData);
 
