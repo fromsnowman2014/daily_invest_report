@@ -309,34 +309,25 @@ const SheetManager = {
     row[cols.WEIGHT_PCT - 1] = ''; // Set later by setDashboardWeightFormulas
     row[cols.MARKET_CAP - 1] = marketCapFormula;
 
-    // P/E: use API value if available, otherwise GOOGLEFINANCE fallback
-    if (data.pe && data.pe !== '') {
-      row[cols.PE - 1] = data.pe;
-    } else {
-      row[cols.PE - 1] = peFormulaLive;
-    }
+    // P/E: Always use GOOGLEFINANCE (real-time)
+    row[cols.PE - 1] = peFormulaLive;  // =GOOGLEFINANCE("ticker","pe")
 
-    // EPS: Calculate from Price and P/E using formula (always real-time)
-    // EPS = Price / P/E
-    // This ensures EPS is always up-to-date without needing API calls
-    const cPE = Utils.colToLetter(cols.PE);  // K
-    row[cols.EPS - 1] = `=IF(${cPE}${R}>0,${cPrice}${R}/${cPE}${R},"")`;
+    // EPS: Direct from GOOGLEFINANCE (simpler and more reliable)
+    row[cols.EPS - 1] = `=GOOGLEFINANCE("${ticker}","eps")`;
 
-    // Today P/E: Same as P/E (since EPS is calculated from P/E)
-    // No need for separate calculation
+    // Today P/E: Same as P/E (both real-time from GOOGLEFINANCE)
     row[cols.TODAY_PE - 1] = peFormulaLive;
 
-    // Forward P/E: use API value (Alpha Vantage) if available, otherwise empty
-    row[cols.FWD_PE - 1] = v(data.fwdPe);
+    // Forward P/E: Direct from GOOGLEFINANCE (real-time)
+    const fwdPeFormulaLive = `=GOOGLEFINANCE("${ticker}","forwardpe")`;
+    row[cols.FWD_PE - 1] = fwdPeFormulaLive;
 
-    // Forward EPS: Calculate from Price and Forward P/E using formula (always real-time)
+    // Forward EPS: Calculate from Price and Forward P/E using formula
     // Forward EPS = Price / Forward P/E
-    // This ensures Forward EPS is always up-to-date without needing separate API calls
     const cFwdPE = Utils.colToLetter(cols.FWD_PE);  // N
     row[cols.FWD_EPS - 1] = `=IF(${cFwdPE}${R}>0,${cPrice}${R}/${cFwdPE}${R},"")`;
 
-    // Today Fwd P/E: Use GOOGLEFINANCE as fallback/verification
-    const fwdPeFormulaLive = `=GOOGLEFINANCE("${ticker}","forwardpe")`;
+    // Today Fwd P/E: Same as Fwd P/E (both real-time from GOOGLEFINANCE)
     row[cols.TODAY_FWD_PE - 1] = fwdPeFormulaLive;
 
     row[cols.PEG - 1] = v(data.peg);

@@ -801,8 +801,147 @@ function testEPSFormula(ticker = null) {
 }
 
 /**
+ * TEST: GOOGLEFINANCE EPS Integration
+ * Verifies that GOOGLEFINANCE is correctly providing EPS, P/E, and Forward P/E.
+ *
+ * @param {string} ticker Ticker symbol to test (default: first stock in Dashboard)
+ */
+function testGoogleFinanceEPS(ticker = null) {
+  Utils.log(`=== TEST: GOOGLEFINANCE EPS Integration ===`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log(`❌ Dashboard is empty. Run updateDailyReport() first.`);
+      return;
+    }
+
+    let targetRow = 2;
+
+    // If ticker specified, find its row
+    if (ticker) {
+      const tickers = dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 1).getValues();
+      let found = false;
+
+      for (let i = 0; i < tickers.length; i++) {
+        if (tickers[i][0] === ticker) {
+          targetRow = i + 2;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        Utils.log(`❌ Ticker "${ticker}" not found. Using first stock instead.`);
+        ticker = tickers[0][0];
+        targetRow = 2;
+      }
+    } else {
+      ticker = dashboard.getRange(2, 1).getValue();
+    }
+
+    Utils.log(`\n[Testing ${ticker} at row ${targetRow}]`);
+
+    const cols = CONFIG.DASHBOARD_COLS;
+
+    // Read values and formulas
+    Utils.log(`\n[COLUMN K: P/E]`);
+    const pe = dashboard.getRange(targetRow, cols.PE).getValue();
+    const peFormula = dashboard.getRange(targetRow, cols.PE).getFormula();
+    Utils.log(`  Value: ${pe}`);
+    Utils.log(`  Formula: ${peFormula || '(not a formula)'}`);
+    Utils.log(`  Source: ${peFormula && peFormula.includes('GOOGLEFINANCE') ? '✅ GOOGLEFINANCE' : '❌ NOT GOOGLEFINANCE'}`);
+
+    Utils.log(`\n[COLUMN M: EPS]`);
+    const eps = dashboard.getRange(targetRow, cols.EPS).getValue();
+    const epsFormula = dashboard.getRange(targetRow, cols.EPS).getFormula();
+    Utils.log(`  Value: ${eps}`);
+    Utils.log(`  Formula: ${epsFormula || '(not a formula)'}`);
+    Utils.log(`  Source: ${epsFormula && epsFormula.includes('GOOGLEFINANCE') ? '✅ GOOGLEFINANCE' : '❌ NOT GOOGLEFINANCE'}`);
+
+    Utils.log(`\n[COLUMN N: Forward P/E]`);
+    const fwdPe = dashboard.getRange(targetRow, cols.FWD_PE).getValue();
+    const fwdPeFormula = dashboard.getRange(targetRow, cols.FWD_PE).getFormula();
+    Utils.log(`  Value: ${fwdPe}`);
+    Utils.log(`  Formula: ${fwdPeFormula || '(not a formula)'}`);
+    Utils.log(`  Source: ${fwdPeFormula && fwdPeFormula.includes('GOOGLEFINANCE') ? '✅ GOOGLEFINANCE' : '❌ NOT GOOGLEFINANCE'}`);
+
+    Utils.log(`\n[COLUMN O: Today Fwd P/E]`);
+    const todayFwdPe = dashboard.getRange(targetRow, cols.TODAY_FWD_PE).getValue();
+    const todayFwdPeFormula = dashboard.getRange(targetRow, cols.TODAY_FWD_PE).getFormula();
+    Utils.log(`  Value: ${todayFwdPe}`);
+    Utils.log(`  Formula: ${todayFwdPeFormula || '(not a formula)'}`);
+    Utils.log(`  Source: ${todayFwdPeFormula && todayFwdPeFormula.includes('GOOGLEFINANCE') ? '✅ GOOGLEFINANCE' : '❌ NOT GOOGLEFINANCE'}`);
+
+    Utils.log(`\n[COLUMN P: Forward EPS]`);
+    const fwdEPS = dashboard.getRange(targetRow, cols.FWD_EPS).getValue();
+    const fwdEPSFormula = dashboard.getRange(targetRow, cols.FWD_EPS).getFormula();
+    Utils.log(`  Value: ${fwdEPS}`);
+    Utils.log(`  Formula: ${fwdEPSFormula || '(not a formula)'}`);
+    Utils.log(`  Calculation: ${fwdEPSFormula ? '✅ Calculated (Price / Fwd P/E)' : '❌ NOT a formula'}`);
+
+    // Verify Forward EPS calculation
+    if (fwdEPSFormula && fwdPe && fwdPe > 0) {
+      const price = dashboard.getRange(targetRow, cols.PRICE).getValue();
+      const expectedFwdEPS = price / fwdPe;
+      const difference = Math.abs(fwdEPS - expectedFwdEPS);
+
+      Utils.log(`\n[FORWARD EPS CALCULATION VERIFICATION]:`);
+      Utils.log(`  Price: ${price}`);
+      Utils.log(`  Forward P/E: ${fwdPe}`);
+      Utils.log(`  Expected Fwd EPS: ${expectedFwdEPS.toFixed(2)}`);
+      Utils.log(`  Actual Fwd EPS: ${fwdEPS ? fwdEPS.toFixed(2) : '(empty)'}`);
+      Utils.log(`  Match: ${difference < 0.01 ? '✅ Correct' : '❌ Incorrect'}`);
+    }
+
+    Utils.log(`\n=== GOOGLEFINANCE EPS Test Complete ===`);
+
+    // Summary
+    let issuesFound = 0;
+
+    if (!peFormula || !peFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: P/E (K) should use GOOGLEFINANCE`);
+      issuesFound++;
+    }
+
+    if (!epsFormula || !epsFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: EPS (M) should use GOOGLEFINANCE`);
+      issuesFound++;
+    }
+
+    if (!fwdPeFormula || !fwdPeFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: Forward P/E (N) should use GOOGLEFINANCE`);
+      issuesFound++;
+    }
+
+    if (!todayFwdPeFormula || !todayFwdPeFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: Today Fwd P/E (O) should use GOOGLEFINANCE`);
+      issuesFound++;
+    }
+
+    if (!fwdEPSFormula) {
+      Utils.log(`\n❌ ISSUE: Forward EPS (P) should be a calculated formula`);
+      issuesFound++;
+    }
+
+    if (issuesFound === 0) {
+      Utils.log(`\n✅ All GOOGLEFINANCE integrations are correct!`);
+    } else {
+      Utils.log(`\n⚠️ Found ${issuesFound} issue(s). Run updateDailyReport() to fix.`);
+    }
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
  * TEST: Full Update Integration
- * Runs a complete update and verifies all new data sources.
+ * Runs a complete update and verifies all new data sources (GOOGLEFINANCE).
+ * Updated to reflect GOOGLEFINANCE as the source for EPS, P/E, and Forward P/E.
  */
 function testFullUpdate() {
   Utils.log(`=== TEST: Full Update Integration ===`);
@@ -811,9 +950,9 @@ function testFullUpdate() {
     Utils.log(`\n[1] Running updateDailyReport()...`);
     updateDailyReport();
 
-    Utils.log(`\n[2] Waiting for formulas to calculate...`);
+    Utils.log(`\n[2] Waiting for GOOGLEFINANCE formulas to calculate...`);
     SpreadsheetApp.flush();
-    Utilities.sleep(5000);
+    Utilities.sleep(10000); // Longer wait for GOOGLEFINANCE
 
     Utils.log(`\n[3] Verifying Dashboard data...`);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -832,43 +971,65 @@ function testFullUpdate() {
     // Check P/E (from GOOGLEFINANCE)
     const pe = dashboard.getRange(2, cols.PE).getValue();
     const peFormula = dashboard.getRange(2, cols.PE).getFormula();
-    Utils.log(`  P/E (K): ${pe} ${peFormula ? '(formula)' : '(value)'}`);
+    Utils.log(`  P/E (K): ${pe} ${peFormula && peFormula.includes('GOOGLEFINANCE') ? '✅ (GOOGLEFINANCE)' : '❌ (not GOOGLEFINANCE!)'}`);
 
-    // Check EPS (calculated formula)
+    // Check EPS (from GOOGLEFINANCE - NEW!)
     const eps = dashboard.getRange(2, cols.EPS).getValue();
     const epsFormula = dashboard.getRange(2, cols.EPS).getFormula();
-    Utils.log(`  EPS (M): ${eps} ${epsFormula ? '✅ (formula)' : '❌ (not formula!)'}`);
+    Utils.log(`  EPS (M): ${eps} ${epsFormula && epsFormula.includes('GOOGLEFINANCE') ? '✅ (GOOGLEFINANCE)' : '❌ (not GOOGLEFINANCE!)'}`);
 
-    // Check Forward P/E (from GOOGLEFINANCE)
+    // Check Forward P/E (from GOOGLEFINANCE - NEW!)
     const fwdPe = dashboard.getRange(2, cols.FWD_PE).getValue();
-    Utils.log(`  Fwd P/E (N): ${fwdPe}`);
+    const fwdPeFormula = dashboard.getRange(2, cols.FWD_PE).getFormula();
+    Utils.log(`  Fwd P/E (N): ${fwdPe} ${fwdPeFormula && fwdPeFormula.includes('GOOGLEFINANCE') ? '✅ (GOOGLEFINANCE)' : '❌ (not GOOGLEFINANCE!)'}`);
 
-    // Check Forward EPS (from Yahoo Finance)
-    const fwdEPS = dashboard.getRange(2, cols.FWD_EPS).getValue();
-    Utils.log(`  Fwd EPS (P): ${fwdEPS} ${fwdEPS ? '✅' : '⚠️ (empty)'}`);
-
-    // Check Today Fwd P/E (calculated formula)
+    // Check Today Fwd P/E (from GOOGLEFINANCE - NEW!)
     const todayFwdPe = dashboard.getRange(2, cols.TODAY_FWD_PE).getValue();
     const todayFwdPeFormula = dashboard.getRange(2, cols.TODAY_FWD_PE).getFormula();
-    Utils.log(`  Today Fwd P/E (O): ${todayFwdPe} ${todayFwdPeFormula ? '✅ (formula)' : '(value)'}`);
+    Utils.log(`  Today Fwd P/E (O): ${todayFwdPe} ${todayFwdPeFormula && todayFwdPeFormula.includes('GOOGLEFINANCE') ? '✅ (GOOGLEFINANCE)' : '❌ (not GOOGLEFINANCE!)'}`);
+
+    // Check Forward EPS (calculated from Price / Fwd P/E)
+    const fwdEPS = dashboard.getRange(2, cols.FWD_EPS).getValue();
+    const fwdEPSFormula = dashboard.getRange(2, cols.FWD_EPS).getFormula();
+    Utils.log(`  Fwd EPS (P): ${fwdEPS} ${fwdEPSFormula ? '✅ (formula)' : '❌ (not formula!)'}`);
 
     Utils.log(`\n=== Full Update Test Complete ===`);
 
     // Summary
     let issuesFound = 0;
 
-    if (!epsFormula) {
-      Utils.log(`\n❌ ISSUE: EPS (M) should be a formula`);
+    if (!epsFormula || !epsFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: EPS (M) should use GOOGLEFINANCE`);
       issuesFound++;
+    }
+
+    if (!fwdPeFormula || !fwdPeFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: Forward P/E (N) should use GOOGLEFINANCE`);
+      issuesFound++;
+    }
+
+    if (!todayFwdPeFormula || !todayFwdPeFormula.includes('GOOGLEFINANCE')) {
+      Utils.log(`\n❌ ISSUE: Today Fwd P/E (O) should use GOOGLEFINANCE`);
+      issuesFound++;
+    }
+
+    if (!fwdEPSFormula) {
+      Utils.log(`\n❌ ISSUE: Forward EPS (P) should be a calculated formula`);
+      issuesFound++;
+    }
+
+    if (!eps || eps <= 0) {
+      Utils.log(`\n⚠️ WARNING: EPS (M) is empty or invalid`);
+      Utils.log(`   Check if GOOGLEFINANCE("${ticker}","eps") returns data`);
     }
 
     if (!fwdEPS || fwdEPS <= 0) {
       Utils.log(`\n⚠️ WARNING: Forward EPS (P) is empty or invalid`);
-      Utils.log(`   This may be normal for REITs or ETFs`);
+      Utils.log(`   Check if GOOGLEFINANCE("${ticker}","forwardpe") returns data`);
     }
 
     if (issuesFound === 0) {
-      Utils.log(`\n✅ All checks passed!`);
+      Utils.log(`\n✅ All checks passed! GOOGLEFINANCE migration successful.`);
     } else {
       Utils.log(`\n⚠️ Found ${issuesFound} issue(s) that need attention.`);
     }

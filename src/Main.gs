@@ -79,8 +79,8 @@ function updateDailyReport(forceUpdateTicker = null) {
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
           // Check if cache has fundamental data from Alpha Vantage
-          // Note: EPS is now calculated via formula (Price/P/E), so no need to check cache.eps
-          const cacheHasData = cache.fwdPe || cache.peg || cache.ps || cache.pb || cache.evEbitda;
+          // Note: EPS, P/E, Forward P/E are now from GOOGLEFINANCE, not in cache
+          const cacheHasData = cache.peg || cache.ps || cache.pb || cache.evEbitda;
 
           // Priority 1: If cache has NO fundamental data, fetch immediately (regardless of age)
           if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
@@ -107,7 +107,7 @@ function updateDailyReport(forceUpdateTicker = null) {
 
         // --- Alpha Vantage Data Retrieval ---
         // Fetch fundamental data (PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth, etc.)
-        // Note: EPS, P/E, Forward P/E are NOT from Alpha Vantage anymore
+        // Note: EPS, P/E, Forward P/E are now from GOOGLEFINANCE (not Alpha Vantage)
         if (shouldFetchApi) {
           const overview = AlphaVantageService.getCompanyOverview(ticker);
           if (overview && overview.ticker) {
@@ -115,9 +115,8 @@ function updateDailyReport(forceUpdateTicker = null) {
               ticker: ticker,
               buyPrice: buyPrice,
               quantity: quantity,
-              // Note: pe and fwdPe from Alpha Vantage kept for reference/cache, but GOOGLEFINANCE is primary source
-              pe: overview.peRatio,
-              fwdPe: overview.forwardPE,
+              // pe: removed - now from GOOGLEFINANCE
+              // fwdPe: removed - now from GOOGLEFINANCE
               peg: overview.pegRatio,
               ps: overview.priceToSalesRatio,
               pb: overview.priceToBookRatio,

@@ -4,10 +4,10 @@
  * API Docs: https://www.alphavantage.co/documentation/
  *
  * DATA SOURCE NOTES (as of 2025-02-18):
- * - EPS: NOT USED - Calculated via formula (Price / P/E) in Sheet_Manager
- * - Forward EPS: NOT USED - Calculated via formula (Price / Forward P/E) in Sheet_Manager
- * - P/E: USED (from Alpha Vantage), GOOGLEFINANCE as fallback
- * - Forward P/E: USED (from Alpha Vantage), GOOGLEFINANCE as fallback
+ * - EPS: NOT USED - Direct from GOOGLEFINANCE
+ * - Forward EPS: NOT USED - Calculated via formula (Price / Forward P/E)
+ * - P/E: NOT USED - Direct from GOOGLEFINANCE
+ * - Forward P/E: NOT USED - Direct from GOOGLEFINANCE
  * - All other fundamentals: USED (PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth metrics)
  */
 
@@ -72,11 +72,14 @@ const AlphaVantageService = {
    * Consumes 1 API call.
    *
    * NOTE: The following fields are returned but NOT USED by Main.gs:
-   * - eps, dilutedEPSTTM (EPS now calculated via formula: Price / P/E)
+   * - eps, dilutedEPSTTM (EPS now direct from GOOGLEFINANCE)
+   * - peRatio (P/E now direct from GOOGLEFINANCE)
+   * - forwardPE (Forward P/E now direct from GOOGLEFINANCE)
    *
-   * These fields ARE USED:
-   * - peRatio (used in Dashboard, GOOGLEFINANCE as fallback)
-   * - forwardPE (used to calculate Forward EPS via formula: Price / Forward P/E)
+   * All other fundamental fields ARE USED:
+   * - pegRatio, priceToSalesRatio, priceToBookRatio, evToEbitda
+   * - profitMargin, operatingMargin, returnOnEquity, returnOnAssets
+   * - revenueGrowth, quarterlyEarningsGrowthYOY, etc.
    *
    * @param {string} ticker The stock ticker symbol.
    * @return {Object} Parsed overview data.
