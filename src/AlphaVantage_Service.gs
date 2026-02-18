@@ -2,6 +2,13 @@
  * AlphaVantage_Service.gs
  * Handles communication with the Alpha Vantage API.
  * API Docs: https://www.alphavantage.co/documentation/
+ *
+ * DATA SOURCE NOTES (as of 2025-02-18):
+ * - EPS: NOT USED - Calculated via formula (Price / P/E) in Sheet_Manager
+ * - Forward EPS: NOT USED - Calculated via formula (Price / Forward P/E) in Sheet_Manager
+ * - P/E: USED (from Alpha Vantage), GOOGLEFINANCE as fallback
+ * - Forward P/E: USED (from Alpha Vantage), GOOGLEFINANCE as fallback
+ * - All other fundamentals: USED (PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth metrics)
  */
 
 const AlphaVantageService = {
@@ -63,6 +70,14 @@ const AlphaVantageService = {
   /**
    * Fetches company overview (fundamentals) for a ticker.
    * Consumes 1 API call.
+   *
+   * NOTE: The following fields are returned but NOT USED by Main.gs:
+   * - eps, dilutedEPSTTM (EPS now calculated via formula: Price / P/E)
+   *
+   * These fields ARE USED:
+   * - peRatio (used in Dashboard, GOOGLEFINANCE as fallback)
+   * - forwardPE (used to calculate Forward EPS via formula: Price / Forward P/E)
+   *
    * @param {string} ticker The stock ticker symbol.
    * @return {Object} Parsed overview data.
    */
@@ -103,6 +118,10 @@ const AlphaVantageService = {
    * Fetches earnings data including quarterly estimates.
    * Consumes 1 API call.
    * Returns quarterly earnings with analyst estimates for future quarters.
+   *
+   * DEPRECATED: This function is no longer called by Main.gs.
+   * Forward EPS is now fetched from Yahoo Finance instead.
+   *
    * @param {string} ticker The stock ticker symbol.
    * @return {Object} Earnings data with quarterlyEarnings array.
    */
@@ -119,6 +138,10 @@ const AlphaVantageService = {
   /**
    * Calculates Forward EPS (next 4 quarters estimated EPS sum).
    * Uses EARNINGS API data to sum up analyst estimates.
+   *
+   * DEPRECATED: This function is no longer called by Main.gs.
+   * Forward EPS is now fetched from Yahoo Finance instead (faster, more reliable).
+   *
    * @param {string} ticker The stock ticker symbol.
    * @return {number|null} Forward EPS or null if unavailable.
    */

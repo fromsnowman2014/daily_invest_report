@@ -9,8 +9,8 @@
  */
 
 // Rotation Configuration
-const ROTATION_INTERVAL_DAYS = 7;
-const MAX_DAILY_API_CALLS = 20; // Safe limit below 25
+const ROTATION_INTERVAL_DAYS = 7;  // Alpha Vantage: Rotate fundamental data every 7 days
+const MAX_DAILY_API_CALLS = 20;    // Alpha Vantage: Safe limit below 25 calls/day
 
 /**
  * Creates the Daily Invest Report menu on open.
@@ -78,8 +78,9 @@ function updateDailyReport(forceUpdateTicker = null) {
           shouldFetchApi = true;
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
-          // Check if cache has ANY fundamental data (including EPS and Forward EPS)
-          const cacheHasData = cache.eps || cache.fwdPe || cache.forwardEPS || cache.peg || cache.ps || cache.pb || cache.evEbitda;
+          // Check if cache has fundamental data from Alpha Vantage
+          // Note: EPS is now calculated via formula (Price/P/E), so no need to check cache.eps
+          const cacheHasData = cache.fwdPe || cache.peg || cache.ps || cache.pb || cache.evEbitda;
 
           // Priority 1: If cache has NO fundamental data, fetch immediately (regardless of age)
           if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
@@ -104,23 +105,18 @@ function updateDailyReport(forceUpdateTicker = null) {
           }
         }
 
-        // --- Data Retrieval ---
+        // --- Alpha Vantage Data Retrieval ---
+        // Fetch fundamental data (PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth, etc.)
+        // Note: EPS, P/E, Forward P/E are NOT from Alpha Vantage anymore
         if (shouldFetchApi) {
           const overview = AlphaVantageService.getCompanyOverview(ticker);
           if (overview && overview.ticker) {
-            // DEBUG: Log raw API response for EPS fields
-            Utils.log(`[${ticker}] 🔍 DEBUG - Raw API Response:`);
-            Utils.log(`  - dilutedEPSTTM: ${overview.dilutedEPSTTM} (${typeof overview.dilutedEPSTTM})`);
-            Utils.log(`  - eps: ${overview.eps} (${typeof overview.eps})`);
-            Utils.log(`  - peRatio: ${overview.peRatio} (${typeof overview.peRatio})`);
-            Utils.log(`  - forwardPE: ${overview.forwardPE} (${typeof overview.forwardPE})`);
-
             financialData = {
               ticker: ticker,
               buyPrice: buyPrice,
               quantity: quantity,
+              // Note: pe and fwdPe from Alpha Vantage kept for reference/cache, but GOOGLEFINANCE is primary source
               pe: overview.peRatio,
-              eps: overview.dilutedEPSTTM || overview.eps,  // Use diluted EPS (more accurate), fallback to basic EPS
               fwdPe: overview.forwardPE,
               peg: overview.pegRatio,
               ps: overview.priceToSalesRatio,
@@ -138,59 +134,22 @@ function updateDailyReport(forceUpdateTicker = null) {
               ...overview
             };
 
-            // DEBUG: Log constructed EPS value
-            Utils.log(`  - Constructed financialData.eps: ${financialData.eps} (${typeof financialData.eps})`);
-            Utils.log(`  - Condition check (eps && eps > 0): ${!!(financialData.eps && financialData.eps > 0)}`);
-
             apiCallsMade++;
-            Utils.log(`[${ticker}] Overview API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
-            Utilities.sleep(12000);
-
-            // Try to fetch Forward EPS from Earnings API (if we have API calls remaining)
-            if (apiCallsMade < MAX_DAILY_API_CALLS) {
-              try {
-                Utils.log(`[${ticker}] 🔍 DEBUG - Calling getForwardEPS()...`);
-                const forwardEPS = AlphaVantageService.getForwardEPS(ticker);
-
-                // DEBUG: Log raw Forward EPS response
-                Utils.log(`  - Raw forwardEPS: ${forwardEPS} (${typeof forwardEPS})`);
-                Utils.log(`  - Condition check (forwardEPS && forwardEPS > 0): ${!!(forwardEPS && forwardEPS > 0)}`);
-
-                if (forwardEPS && forwardEPS > 0) {
-                  financialData.forwardEPS = forwardEPS;
-                  apiCallsMade++;
-                  Utils.log(`[${ticker}] ✅ Earnings API Call Successful. Forward EPS: ${forwardEPS.toFixed(2)} (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
-                  Utils.log(`  - Set financialData.forwardEPS: ${financialData.forwardEPS}`);
-                  Utilities.sleep(12000);
-                } else {
-                  Utils.log(`[${ticker}] ⚠️ No Forward EPS available (value: ${forwardEPS}). Today Fwd P/E will be empty.`);
-                }
-              } catch (earningsError) {
-                Utils.log(`[${ticker}] ❌ Earnings API Error: ${earningsError.message}. Skipping Forward EPS.`);
-                Utils.log(`  Stack: ${earningsError.stack}`);
-              }
-            } else {
-              Utils.log(`[${ticker}] API limit reached. Skipping Earnings API call.`);
-            }
+            Utils.log(`[${ticker}] Alpha Vantage Overview API Call Successful. (Calls: ${apiCallsMade}/${MAX_DAILY_API_CALLS})`);
+            Utilities.sleep(12000);  // Alpha Vantage rate limiting
 
           } else {
-            Utils.log(`[${ticker}] API Fetch Failed (may be ETF or invalid ticker). Falling back to cache.`);
+            Utils.log(`[${ticker}] Alpha Vantage API Fetch Failed (may be ETF or invalid ticker). Falling back to cache.`);
             financialData = cache || {};
           }
         } else {
           financialData = cache || {};
         }
 
+        // Ensure required fields are set
         financialData.ticker = ticker;
         financialData.buyPrice = buyPrice;
         financialData.quantity = quantity;
-
-        // DEBUG: Log final financialData before passing to appendDashboardRow
-        Utils.log(`[${ticker}] 🔍 DEBUG - Final financialData before appendDashboardRow:`);
-        Utils.log(`  - eps: ${financialData.eps} (${typeof financialData.eps})`);
-        Utils.log(`  - forwardEPS: ${financialData.forwardEPS} (${typeof financialData.forwardEPS})`);
-        Utils.log(`  - pe: ${financialData.pe}`);
-        Utils.log(`  - fwdPe: ${financialData.fwdPe}`);
 
         SheetManager.appendDashboardRow(financialData);
 

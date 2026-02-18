@@ -110,6 +110,13 @@ const SheetManager = {
   /**
    * Reads the current Dashboard data for caching purposes.
    * Called BEFORE initDashboard() clears the sheet. Skips TOTAL row.
+   *
+   * DATA SOURCE NOTES:
+   * - EPS: NOT CACHED (calculated via formula Price/P/E, always real-time)
+   * - Forward EPS: NOT CACHED (calculated via formula Price/Forward P/E, always real-time)
+   * - P/E, Forward P/E: CACHED (from Alpha Vantage and GOOGLEFINANCE)
+   * - All other fundamentals: CACHED (from Alpha Vantage, updated every 7 days)
+   *
    * @return {Object} Map of ticker -> cached financial data
    */
   getDashboardData: function() {
@@ -137,11 +144,10 @@ const SheetManager = {
       const ticker = row[cols.TICKER - 1];
       if (ticker && ticker !== 'TOTAL') {
         dashboardMap[ticker] = {
+          // NOTE: 'eps' and 'forwardEPS' removed - both calculated via formulas, don't need caching
           price: toValue(row[cols.PRICE - 1]),
           pe: toValue(row[cols.PE - 1]),
-          eps: toValue(row[cols.EPS - 1]),
-          fwdPe: toValue(row[cols.FWD_PE - 1]),
-          forwardEPS: toValue(row[cols.FWD_EPS - 1]),
+          fwdPe: toValue(row[cols.FWD_PE - 1]),  // From Alpha Vantage
           peg: toValue(row[cols.PEG - 1]),
           ps: toValue(row[cols.PS - 1]),
           pb: toValue(row[cols.PB - 1]),
@@ -310,47 +316,28 @@ const SheetManager = {
       row[cols.PE - 1] = peFormulaLive;
     }
 
-    // Today P/E: Real-time P/E = Price / EPS
-    // EPS is stored in column M for reference
-    // DEBUG: Log EPS evaluation
-    Utils.log(`  🔍 [appendDashboardRow] ${ticker} - EPS Evaluation:`);
-    Utils.log(`    - data.eps: ${data.eps} (${typeof data.eps})`);
-    Utils.log(`    - Condition (data.eps && data.eps > 0): ${!!(data.eps && data.eps > 0)}`);
+    // EPS: Calculate from Price and P/E using formula (always real-time)
+    // EPS = Price / P/E
+    // This ensures EPS is always up-to-date without needing API calls
+    const cPE = Utils.colToLetter(cols.PE);  // K
+    row[cols.EPS - 1] = `=IF(${cPE}${R}>0,${cPrice}${R}/${cPE}${R},"")`;
 
-    if (data.eps && data.eps > 0) {
-      const cEPS = Utils.colToLetter(cols.EPS);
-      row[cols.TODAY_PE - 1] = `=${cPrice}${R}/${cEPS}${R}`;
-      row[cols.EPS - 1] = data.eps;
-      Utils.log(`    - ✅ Setting EPS in column M: ${data.eps}`);
-      Utils.log(`    - ✅ Setting Today P/E formula in column L: =${cPrice}${R}/${cEPS}${R}`);
-    } else {
-      // Fallback to GOOGLEFINANCE if no EPS available
-      row[cols.TODAY_PE - 1] = peFormulaLive;
-      row[cols.EPS - 1] = '';
-      Utils.log(`    - ⚠️ EPS condition failed. Column M will be empty.`);
-      Utils.log(`    - Using GOOGLEFINANCE P/E fallback for column L`);
-    }
+    // Today P/E: Same as P/E (since EPS is calculated from P/E)
+    // No need for separate calculation
+    row[cols.TODAY_PE - 1] = peFormulaLive;
 
+    // Forward P/E: use API value (Alpha Vantage) if available, otherwise empty
     row[cols.FWD_PE - 1] = v(data.fwdPe);
 
-    // Today Fwd P/E: Real-time Forward P/E = Price / Forward EPS
-    // Forward EPS is stored in column P for reference
-    // DEBUG: Log Forward EPS evaluation
-    Utils.log(`  🔍 [appendDashboardRow] ${ticker} - Forward EPS Evaluation:`);
-    Utils.log(`    - data.forwardEPS: ${data.forwardEPS} (${typeof data.forwardEPS})`);
-    Utils.log(`    - Condition (data.forwardEPS && data.forwardEPS > 0): ${!!(data.forwardEPS && data.forwardEPS > 0)}`);
+    // Forward EPS: Calculate from Price and Forward P/E using formula (always real-time)
+    // Forward EPS = Price / Forward P/E
+    // This ensures Forward EPS is always up-to-date without needing separate API calls
+    const cFwdPE = Utils.colToLetter(cols.FWD_PE);  // N
+    row[cols.FWD_EPS - 1] = `=IF(${cFwdPE}${R}>0,${cPrice}${R}/${cFwdPE}${R},"")`;
 
-    if (data.forwardEPS && data.forwardEPS > 0) {
-      const cFwdEPS = Utils.colToLetter(cols.FWD_EPS);
-      row[cols.TODAY_FWD_PE - 1] = `=${cPrice}${R}/${cFwdEPS}${R}`;
-      row[cols.FWD_EPS - 1] = data.forwardEPS;
-      Utils.log(`    - ✅ Setting Fwd EPS in column P: ${data.forwardEPS}`);
-      Utils.log(`    - ✅ Setting Today Fwd P/E formula in column O: =${cPrice}${R}/${cFwdEPS}${R}`);
-    } else {
-      row[cols.TODAY_FWD_PE - 1] = '';
-      row[cols.FWD_EPS - 1] = '';
-      Utils.log(`    - ⚠️ Forward EPS condition failed. Columns O and P will be empty.`);
-    }
+    // Today Fwd P/E: Use GOOGLEFINANCE as fallback/verification
+    const fwdPeFormulaLive = `=GOOGLEFINANCE("${ticker}","forwardpe")`;
+    row[cols.TODAY_FWD_PE - 1] = fwdPeFormulaLive;
 
     row[cols.PEG - 1] = v(data.peg);
     row[cols.PS - 1] = v(data.ps);

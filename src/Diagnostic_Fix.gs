@@ -605,3 +605,276 @@ function forceFixDashboardHeaders() {
   Utils.log(`Please check your Dashboard sheet now.`);
   Utils.log(`If headers look correct, run updateDailyReport() to populate data.`);
 }
+
+/**
+ * TEST: Forward EPS Formula Calculation
+ * Verifies that Forward EPS is correctly calculated as Price / Forward P/E in Dashboard.
+ *
+ * @param {string} ticker Ticker symbol to test (default: first stock in Dashboard)
+ */
+function testForwardEPSFormula(ticker = null) {
+  Utils.log(`=== TEST: Forward EPS Formula Calculation ===`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log(`❌ Dashboard is empty. Run updateDailyReport() first.`);
+      return;
+    }
+
+    let targetRow = 2; // Default to first stock
+
+    // If ticker specified, find its row
+    if (ticker) {
+      const tickers = dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 1).getValues();
+      let found = false;
+
+      for (let i = 0; i < tickers.length; i++) {
+        if (tickers[i][0] === ticker) {
+          targetRow = i + 2;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        Utils.log(`❌ Ticker "${ticker}" not found. Using first stock instead.`);
+        ticker = tickers[0][0];
+        targetRow = 2;
+      }
+    } else {
+      ticker = dashboard.getRange(2, 1).getValue();
+    }
+
+    Utils.log(`\n[Testing ${ticker} at row ${targetRow}]`);
+
+    const cols = CONFIG.DASHBOARD_COLS;
+
+    // Read values
+    const price = dashboard.getRange(targetRow, cols.PRICE).getValue();
+    const fwdPe = dashboard.getRange(targetRow, cols.FWD_PE).getValue();
+    const fwdEPS = dashboard.getRange(targetRow, cols.FWD_EPS).getValue();
+    const fwdEPSFormula = dashboard.getRange(targetRow, cols.FWD_EPS).getFormula();
+
+    Utils.log(`\n[VALUES]:`);
+    Utils.log(`  Price (B): ${price}`);
+    Utils.log(`  Forward P/E (N): ${fwdPe}`);
+    Utils.log(`  Forward EPS (P): ${fwdEPS}`);
+
+    Utils.log(`\n[FORMULA CHECK]:`);
+    if (!fwdEPSFormula) {
+      Utils.log(`  ❌ Column P (Fwd EPS) is NOT a formula!`);
+      Utils.log(`     Current value: ${fwdEPS}`);
+      Utils.log(`     Expected: =IF(N>0,B/N,"")`);
+      return;
+    }
+
+    Utils.log(`  ✅ Column P is a formula: ${fwdEPSFormula}`);
+
+    // Verify calculation
+    if (fwdPe && fwdPe > 0) {
+      const expectedFwdEPS = price / fwdPe;
+      const difference = Math.abs(fwdEPS - expectedFwdEPS);
+      const tolerance = 0.01; // Allow 1 cent difference due to rounding
+
+      Utils.log(`\n[CALCULATION VERIFICATION]:`);
+      Utils.log(`  Manual calculation: ${price} / ${fwdPe} = ${expectedFwdEPS.toFixed(2)}`);
+      Utils.log(`  Formula result: ${fwdEPS ? fwdEPS.toFixed(2) : '(empty)'}`);
+      Utils.log(`  Difference: ${difference.toFixed(4)}`);
+
+      if (difference < tolerance) {
+        Utils.log(`  ✅ MATCH! Forward EPS formula is calculating correctly.`);
+      } else {
+        Utils.log(`  ⚠️ MISMATCH! Formula may have an issue.`);
+      }
+    } else {
+      Utils.log(`\n[CALCULATION VERIFICATION]:`);
+      Utils.log(`  Forward P/E is ${fwdPe} (not positive)`);
+      Utils.log(`  Forward EPS should be empty: ${fwdEPS === '' ? '✅ Correct' : '❌ Should be empty'}`);
+    }
+
+    Utils.log(`\n=== Forward EPS Formula Test Complete ===`);
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
+ * TEST: EPS Formula Calculation
+ * Verifies that EPS is correctly calculated as Price / P/E in Dashboard.
+ *
+ * @param {string} ticker Ticker symbol to test (default: first stock in Dashboard)
+ */
+function testEPSFormula(ticker = null) {
+  Utils.log(`=== TEST: EPS Formula Calculation ===`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log(`❌ Dashboard is empty. Run updateDailyReport() first.`);
+      return;
+    }
+
+    let targetRow = 2; // Default to first stock
+
+    // If ticker specified, find its row
+    if (ticker) {
+      const tickers = dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 1).getValues();
+      let found = false;
+
+      for (let i = 0; i < tickers.length; i++) {
+        if (tickers[i][0] === ticker) {
+          targetRow = i + 2;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        Utils.log(`❌ Ticker "${ticker}" not found. Using first stock instead.`);
+        ticker = tickers[0][0];
+        targetRow = 2;
+      }
+    } else {
+      ticker = dashboard.getRange(2, 1).getValue();
+    }
+
+    Utils.log(`\n[Testing ${ticker} at row ${targetRow}]`);
+
+    const cols = CONFIG.DASHBOARD_COLS;
+
+    // Read values
+    const price = dashboard.getRange(targetRow, cols.PRICE).getValue();
+    const pe = dashboard.getRange(targetRow, cols.PE).getValue();
+    const eps = dashboard.getRange(targetRow, cols.EPS).getValue();
+    const epsFormula = dashboard.getRange(targetRow, cols.EPS).getFormula();
+
+    Utils.log(`\n[VALUES]:`);
+    Utils.log(`  Price (B): ${price}`);
+    Utils.log(`  P/E (K): ${pe}`);
+    Utils.log(`  EPS (M): ${eps}`);
+
+    Utils.log(`\n[FORMULA CHECK]:`);
+    if (!epsFormula) {
+      Utils.log(`  ❌ Column M (EPS) is NOT a formula!`);
+      Utils.log(`     Current value: ${eps}`);
+      Utils.log(`     Expected: =IF(K>0,B/K,"")`);
+      return;
+    }
+
+    Utils.log(`  ✅ Column M is a formula: ${epsFormula}`);
+
+    // Verify calculation
+    if (pe && pe > 0) {
+      const expectedEPS = price / pe;
+      const difference = Math.abs(eps - expectedEPS);
+      const tolerance = 0.01; // Allow 1 cent difference due to rounding
+
+      Utils.log(`\n[CALCULATION VERIFICATION]:`);
+      Utils.log(`  Manual calculation: ${price} / ${pe} = ${expectedEPS.toFixed(2)}`);
+      Utils.log(`  Formula result: ${eps ? eps.toFixed(2) : '(empty)'}`);
+      Utils.log(`  Difference: ${difference.toFixed(4)}`);
+
+      if (difference < tolerance) {
+        Utils.log(`  ✅ MATCH! EPS formula is calculating correctly.`);
+      } else {
+        Utils.log(`  ⚠️ MISMATCH! Formula may have an issue.`);
+      }
+    } else {
+      Utils.log(`\n[CALCULATION VERIFICATION]:`);
+      Utils.log(`  P/E is ${pe} (not positive)`);
+      Utils.log(`  EPS should be empty: ${eps === '' ? '✅ Correct' : '❌ Should be empty'}`);
+    }
+
+    Utils.log(`\n=== EPS Formula Test Complete ===`);
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
+ * TEST: Full Update Integration
+ * Runs a complete update and verifies all new data sources.
+ */
+function testFullUpdate() {
+  Utils.log(`=== TEST: Full Update Integration ===`);
+
+  try {
+    Utils.log(`\n[1] Running updateDailyReport()...`);
+    updateDailyReport();
+
+    Utils.log(`\n[2] Waiting for formulas to calculate...`);
+    SpreadsheetApp.flush();
+    Utilities.sleep(5000);
+
+    Utils.log(`\n[3] Verifying Dashboard data...`);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log(`  ❌ Dashboard is empty after update!`);
+      return;
+    }
+
+    const cols = CONFIG.DASHBOARD_COLS;
+    const ticker = dashboard.getRange(2, 1).getValue();
+
+    Utils.log(`\n[Checking ${ticker}]:`);
+
+    // Check P/E (from GOOGLEFINANCE)
+    const pe = dashboard.getRange(2, cols.PE).getValue();
+    const peFormula = dashboard.getRange(2, cols.PE).getFormula();
+    Utils.log(`  P/E (K): ${pe} ${peFormula ? '(formula)' : '(value)'}`);
+
+    // Check EPS (calculated formula)
+    const eps = dashboard.getRange(2, cols.EPS).getValue();
+    const epsFormula = dashboard.getRange(2, cols.EPS).getFormula();
+    Utils.log(`  EPS (M): ${eps} ${epsFormula ? '✅ (formula)' : '❌ (not formula!)'}`);
+
+    // Check Forward P/E (from GOOGLEFINANCE)
+    const fwdPe = dashboard.getRange(2, cols.FWD_PE).getValue();
+    Utils.log(`  Fwd P/E (N): ${fwdPe}`);
+
+    // Check Forward EPS (from Yahoo Finance)
+    const fwdEPS = dashboard.getRange(2, cols.FWD_EPS).getValue();
+    Utils.log(`  Fwd EPS (P): ${fwdEPS} ${fwdEPS ? '✅' : '⚠️ (empty)'}`);
+
+    // Check Today Fwd P/E (calculated formula)
+    const todayFwdPe = dashboard.getRange(2, cols.TODAY_FWD_PE).getValue();
+    const todayFwdPeFormula = dashboard.getRange(2, cols.TODAY_FWD_PE).getFormula();
+    Utils.log(`  Today Fwd P/E (O): ${todayFwdPe} ${todayFwdPeFormula ? '✅ (formula)' : '(value)'}`);
+
+    Utils.log(`\n=== Full Update Test Complete ===`);
+
+    // Summary
+    let issuesFound = 0;
+
+    if (!epsFormula) {
+      Utils.log(`\n❌ ISSUE: EPS (M) should be a formula`);
+      issuesFound++;
+    }
+
+    if (!fwdEPS || fwdEPS <= 0) {
+      Utils.log(`\n⚠️ WARNING: Forward EPS (P) is empty or invalid`);
+      Utils.log(`   This may be normal for REITs or ETFs`);
+    }
+
+    if (issuesFound === 0) {
+      Utils.log(`\n✅ All checks passed!`);
+    } else {
+      Utils.log(`\n⚠️ Found ${issuesFound} issue(s) that need attention.`);
+    }
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
