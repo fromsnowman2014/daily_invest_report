@@ -801,6 +801,334 @@ function testEPSFormula(ticker = null) {
 }
 
 /**
+ * DEBUG: Check Dashboard Last Updated Time
+ * Verifies when the Dashboard was last updated to understand if formulas need refresh.
+ */
+function debugDashboardUpdateStatus() {
+  Utils.log(`=== DEBUG: Dashboard Update Status ===`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log(`❌ Dashboard is empty.`);
+      return;
+    }
+
+    const cols = CONFIG.DASHBOARD_COLS;
+    const lastRow = dashboard.getLastRow();
+
+    Utils.log(`\n[Dashboard Info]:`);
+    Utils.log(`  Total Rows: ${lastRow}`);
+    Utils.log(`  Total Columns: ${dashboard.getLastColumn()}`);
+    Utils.log(`  Expected Columns: ${CONFIG.DASHBOARD_COL_COUNT}`);
+
+    // Check last updated dates for all tickers
+    Utils.log(`\n[Last Updated Times]:`);
+    for (let row = 2; row <= Math.min(lastRow, 6); row++) {
+      const ticker = dashboard.getRange(row, cols.TICKER).getValue();
+      const lastUpdated = dashboard.getRange(row, cols.LAST_UPDATED).getValue();
+      const epsFormula = dashboard.getRange(row, cols.EPS).getFormula();
+      const epsValue = dashboard.getRange(row, cols.EPS).getValue();
+
+      Utils.log(`  Row ${row} (${ticker}):`);
+      Utils.log(`    - Last Updated: ${lastUpdated}`);
+      Utils.log(`    - EPS Formula: ${epsFormula || '(none)'}`);
+      Utils.log(`    - EPS Value: ${epsValue || '(empty)'}`);
+    }
+
+    Utils.log(`\n=== Debug Complete ===`);
+    Utils.log(`\nRECOMMENDATION: If "Last Updated" is old or EPS formulas are missing,`);
+    Utils.log(`run updateDailyReport() to refresh Dashboard with GOOGLEFINANCE formulas.`);
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
+ * DEBUG: Manually Test GOOGLEFINANCE Formula
+ * Tests if GOOGLEFINANCE works for a specific ticker by writing a test formula.
+ *
+ * @param {string} ticker Ticker symbol to test (default: 'AAPL')
+ */
+function debugGoogleFinanceFormula(ticker = 'AAPL') {
+  Utils.log(`=== DEBUG: Manual GOOGLEFINANCE Formula Test ===`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let testSheet = ss.getSheetByName('GOOGLEFINANCE_Test');
+
+    // Create test sheet if it doesn't exist
+    if (!testSheet) {
+      testSheet = ss.insertSheet('GOOGLEFINANCE_Test');
+      Utils.log(`  Created test sheet: GOOGLEFINANCE_Test`);
+    } else {
+      testSheet.clear();
+      Utils.log(`  Cleared existing test sheet`);
+    }
+
+    // Write test formulas
+    Utils.log(`\n[Writing test formulas for ${ticker}]:`);
+
+    testSheet.getRange('A1').setValue('Metric');
+    testSheet.getRange('B1').setValue('Formula');
+    testSheet.getRange('C1').setValue('Value');
+
+    const tests = [
+      ['Price', `=GOOGLEFINANCE("${ticker}","price")`],
+      ['P/E', `=GOOGLEFINANCE("${ticker}","pe")`],
+      ['EPS', `=GOOGLEFINANCE("${ticker}","eps")`],
+      ['Forward P/E', `=GOOGLEFINANCE("${ticker}","forwardpe")`],
+      ['Forward P/E (IFERROR)', `=IFERROR(GOOGLEFINANCE("${ticker}","forwardpe"),"")`]
+    ];
+
+    tests.forEach((test, idx) => {
+      const row = idx + 2;
+      testSheet.getRange(`A${row}`).setValue(test[0]);
+      testSheet.getRange(`B${row}`).setFormula(test[1]);
+    });
+
+    Utils.log(`  ✓ Wrote test formulas to GOOGLEFINANCE_Test sheet`);
+
+    // Wait for formulas to calculate
+    Utils.log(`\n[Waiting 5 seconds for formulas to calculate...]`);
+    SpreadsheetApp.flush();
+    Utilities.sleep(5000);
+
+    // Read results
+    Utils.log(`\n[Results for ${ticker}]:`);
+    tests.forEach((test, idx) => {
+      const row = idx + 2;
+      const value = testSheet.getRange(`B${row}`).getValue();
+      const displayValue = testSheet.getRange(`B${row}`).getDisplayValue();
+
+      Utils.log(`  ${test[0]}:`);
+      Utils.log(`    Formula: ${test[1]}`);
+      Utils.log(`    Value: ${value}`);
+      Utils.log(`    Display: ${displayValue}`);
+
+      if (displayValue === '#N/A') {
+        Utils.log(`    Status: ❌ #N/A Error - Data not available for this ticker`);
+      } else if (value) {
+        Utils.log(`    Status: ✅ Works`);
+      } else {
+        Utils.log(`    Status: ⚠️ Empty or zero`);
+      }
+    });
+
+    Utils.log(`\n=== Manual Formula Test Complete ===`);
+    Utils.log(`\nCheck the "GOOGLEFINANCE_Test" sheet to see the results.`);
+    Utils.log(`\n💡 INTERPRETATION:`);
+    Utils.log(`  - If Forward P/E shows #N/A: GOOGLEFINANCE doesn't have forward P/E data for this ticker`);
+    Utils.log(`  - Common for: REITs, ETFs, small-cap stocks, international stocks`);
+    Utils.log(`  - Solution: Use IFERROR wrapper or leave empty for unsupported tickers`);
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
+ * DEBUG: Check All Dashboard Tickers for Forward P/E Support
+ * Scans all tickers in Dashboard and reports which ones have #N/A for Forward P/E.
+ */
+function debugDashboardForwardPESupport() {
+  Utils.log(`=== DEBUG: Dashboard Forward P/E Support Check ===`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const dashboard = ss.getSheetByName(CONFIG.SHEET_NAMES.DASHBOARD);
+
+    if (!dashboard || dashboard.getLastRow() < 2) {
+      Utils.log(`❌ Dashboard is empty.`);
+      return;
+    }
+
+    const cols = CONFIG.DASHBOARD_COLS;
+    const lastRow = dashboard.getLastRow();
+
+    Utils.log(`\n[Scanning ${lastRow - 1} tickers for Forward P/E support]\n`);
+
+    let supportedCount = 0;
+    let unsupportedCount = 0;
+    const unsupportedTickers = [];
+
+    for (let row = 2; row <= lastRow; row++) {
+      const ticker = dashboard.getRange(row, cols.TICKER).getValue();
+
+      if (ticker === 'TOTAL') continue;
+
+      const fwdPeValue = dashboard.getRange(row, cols.FWD_PE).getValue();
+      const fwdPeDisplay = dashboard.getRange(row, cols.FWD_PE).getDisplayValue();
+      const fwdPeFormula = dashboard.getRange(row, cols.FWD_PE).getFormula();
+
+      if (fwdPeDisplay === '#N/A' || fwdPeDisplay.includes('N/A')) {
+        unsupportedCount++;
+        unsupportedTickers.push(ticker);
+        Utils.log(`  ❌ ${ticker}: Forward P/E NOT available (#N/A)`);
+      } else if (fwdPeValue && fwdPeValue > 0) {
+        supportedCount++;
+        Utils.log(`  ✅ ${ticker}: Forward P/E = ${fwdPeValue.toFixed(2)}`);
+      } else {
+        Utils.log(`  ⚠️ ${ticker}: Forward P/E empty or zero`);
+      }
+    }
+
+    Utils.log(`\n=== Summary ===`);
+    Utils.log(`  Total tickers scanned: ${lastRow - 1}`);
+    Utils.log(`  ✅ Supported (has Forward P/E): ${supportedCount}`);
+    Utils.log(`  ❌ Unsupported (#N/A): ${unsupportedCount}`);
+
+    if (unsupportedTickers.length > 0) {
+      Utils.log(`\n  Unsupported tickers: ${unsupportedTickers.join(', ')}`);
+      Utils.log(`\n💡 RECOMMENDATION:`);
+      Utils.log(`  These tickers don't have Forward P/E data in GOOGLEFINANCE.`);
+      Utils.log(`  Options:`);
+      Utils.log(`    1. Wrap formulas with IFERROR to hide #N/A errors`);
+      Utils.log(`    2. Accept that Forward P/E is not available for these tickers`);
+      Utils.log(`    3. Use alternative data source (Alpha Vantage) as fallback`);
+    } else {
+      Utils.log(`\n✅ All tickers support Forward P/E!`);
+    }
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
+ * DEBUG: Test GOOGLEFINANCE Attributes
+ * Tests what attributes GOOGLEFINANCE supports for a given ticker.
+ *
+ * @param {string} ticker Ticker symbol to test (default: 'AAPL')
+ */
+function debugGoogleFinanceAttributes(ticker = 'AAPL') {
+  Utils.log(`=== DEBUG: GOOGLEFINANCE Attribute Support Test ===`);
+  Utils.log(`Testing ticker: ${ticker}\n`);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let testSheet = ss.getSheetByName('GOOGLEFINANCE_Attributes_Test');
+
+    if (!testSheet) {
+      testSheet = ss.insertSheet('GOOGLEFINANCE_Attributes_Test');
+    } else {
+      testSheet.clear();
+    }
+
+    // Test all possible attributes
+    const attributes = [
+      'price', 'pe', 'eps', 'forwardpe',
+      'high', 'low', 'volume', 'marketcap',
+      'high52', 'low52', 'beta', 'shares',
+      'priceopen', 'priceavg50', 'priceavg200',
+      'div', 'yieldpct'
+    ];
+
+    testSheet.getRange('A1').setValue('Attribute');
+    testSheet.getRange('B1').setValue('Formula');
+    testSheet.getRange('C1').setValue('Result');
+    testSheet.getRange('D1').setValue('Status');
+
+    attributes.forEach((attr, idx) => {
+      const row = idx + 2;
+      const formula = `=IFERROR(GOOGLEFINANCE("${ticker}","${attr}"),"N/A")`;
+
+      testSheet.getRange(row, 1).setValue(attr);
+      testSheet.getRange(row, 2).setFormula(formula);
+    });
+
+    Utils.log(`✓ Wrote ${attributes.length} test formulas`);
+    Utils.log(`\nWaiting 5 seconds for calculations...`);
+    SpreadsheetApp.flush();
+    Utilities.sleep(5000);
+
+    // Check results
+    Utils.log(`\n[Results]:\n`);
+
+    let supported = 0;
+    let unsupported = 0;
+
+    attributes.forEach((attr, idx) => {
+      const row = idx + 2;
+      const result = testSheet.getRange(row, 2).getValue();
+      const display = testSheet.getRange(row, 2).getDisplayValue();
+
+      if (display === 'N/A' || result === 'N/A' || !result) {
+        testSheet.getRange(row, 4).setValue('❌ Not Available');
+        Utils.log(`  ❌ ${attr}: Not available`);
+        unsupported++;
+      } else {
+        testSheet.getRange(row, 4).setValue('✅ Available');
+        Utils.log(`  ✅ ${attr}: ${display}`);
+        supported++;
+      }
+    });
+
+    Utils.log(`\n=== Summary ===`);
+    Utils.log(`  ✅ Supported: ${supported}/${attributes.length}`);
+    Utils.log(`  ❌ Unsupported: ${unsupported}/${attributes.length}`);
+    Utils.log(`\nCheck "GOOGLEFINANCE_Attributes_Test" sheet for full results.`);
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
+ * TEST: Finviz Forward Metrics
+ * Tests Finviz service for a specific ticker.
+ *
+ * @param {string} ticker Ticker symbol to test (default: 'NVDA')
+ */
+function testFinvizForwardMetrics(ticker = 'NVDA') {
+  Utils.log(`=== TEST: Finviz Forward Metrics ===`);
+  Utils.log(`Testing ticker: ${ticker}\n`);
+
+  try {
+    // Test individual methods
+    Utils.log(`[Test 1: Forward P/E]`);
+    const fwdPe = FinvizService.getForwardPE(ticker);
+    Utils.log(`  Result: ${fwdPe}`);
+    Utils.log(`  Status: ${fwdPe ? '✅ Success' : '❌ Failed'}\n`);
+
+    Utils.log(`[Test 2: Forward EPS]`);
+    const fwdEPS = FinvizService.getForwardEPS(ticker);
+    Utils.log(`  Result: ${fwdEPS}`);
+    Utils.log(`  Status: ${fwdEPS ? '✅ Success' : '❌ Failed'}\n`);
+
+    // Test combined method (optimized)
+    Utils.log(`[Test 3: Combined Forward Metrics (Optimized)]`);
+    const combined = FinvizService.getForwardMetrics(ticker);
+    Utils.log(`  Forward P/E: ${combined.fwdPe}`);
+    Utils.log(`  Forward EPS: ${combined.fwdEPS}`);
+    Utils.log(`  Status: ${(combined.fwdPe && combined.fwdEPS) ? '✅ Both retrieved' : '⚠️ Partial data'}\n`);
+
+    Utils.log(`=== Test Complete ===`);
+
+    if (fwdPe && fwdEPS) {
+      Utils.log(`\n✅ All tests passed for ${ticker}!`);
+      Utils.log(`\nCalculated Today Fwd P/E (if Price = $100):`);
+      const mockPrice = 100;
+      const todayFwdPE = mockPrice / fwdEPS;
+      Utils.log(`  Price / Fwd EPS = ${mockPrice} / ${fwdEPS} = ${todayFwdPE.toFixed(2)}`);
+    } else {
+      Utils.log(`\n⚠️ Some tests failed. Check Finviz availability for ${ticker}.`);
+    }
+
+  } catch (error) {
+    Utils.log(`\n❌ ERROR: ${error.message}`);
+    Utils.log(`Stack: ${error.stack}`);
+  }
+}
+
+/**
  * TEST: GOOGLEFINANCE EPS Integration
  * Verifies that GOOGLEFINANCE is correctly providing EPS, P/E, and Forward P/E.
  *
@@ -844,7 +1172,10 @@ function testGoogleFinanceEPS(ticker = null) {
 
     Utils.log(`\n[Testing ${ticker} at row ${targetRow}]`);
 
+    // Check when this row was last updated
     const cols = CONFIG.DASHBOARD_COLS;
+    const lastUpdated = dashboard.getRange(targetRow, cols.LAST_UPDATED).getValue();
+    Utils.log(`  Last Updated: ${lastUpdated}`);
 
     // Read values and formulas
     Utils.log(`\n[COLUMN K: P/E]`);

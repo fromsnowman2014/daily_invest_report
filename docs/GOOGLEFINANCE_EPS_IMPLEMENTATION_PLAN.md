@@ -44,7 +44,7 @@ Based on official Google Sheets documentation and research:
 |--------|-------|--------|--------|-----------------|--------|
 | B | Price | GOOGLEFINANCE | Formula | `=GOOGLEFINANCE("AAPL","price")` | No |
 | K | P/E | GOOGLEFINANCE | Formula | `=GOOGLEFINANCE("AAPL","pe")` | No |
-| L | Today P/E | GOOGLEFINANCE | Formula | `=GOOGLEFINANCE("AAPL","pe")` | No |
+| L | **Today P/E** | **Calculated** | **Formula** | **`=IF(M2>0,B2/M2,"")`** | **No** |
 | M | **EPS** | **GOOGLEFINANCE** | **Formula** | `=GOOGLEFINANCE("AAPL","eps")` | **No** |
 | N | Fwd P/E | GOOGLEFINANCE | Formula | `=GOOGLEFINANCE("AAPL","forwardpe")` | No |
 | O | Today Fwd P/E | GOOGLEFINANCE | Formula | `=GOOGLEFINANCE("AAPL","forwardpe")` | No |
@@ -83,8 +83,9 @@ Based on official Google Sheets documentation and research:
 // EPS - Direct from GOOGLEFINANCE
 row[cols.EPS - 1] = `=GOOGLEFINANCE("${ticker}","eps")`;
 
-// Today P/E - Direct from GOOGLEFINANCE
-row[cols.TODAY_PE - 1] = `=GOOGLEFINANCE("${ticker}","pe")`;
+// Today P/E - Calculate from Price / EPS
+const cEPS = Utils.colToLetter(cols.EPS);  // M
+row[cols.TODAY_PE - 1] = `=IF(${cEPS}${R}>0,${cPrice}${R}/${cEPS}${R},"")`;
 
 // Forward EPS - Calculated from Price and Forward P/E
 const cFwdPE = Utils.colToLetter(cols.FWD_PE);  // N
@@ -145,13 +146,15 @@ row[cols.EPS - 1] = `=GOOGLEFINANCE("${ticker}","eps")`;
 // P/E (K): Direct from GOOGLEFINANCE
 row[cols.PE - 1] = `=GOOGLEFINANCE("${ticker}","pe")`;
 
-// Today P/E (L): Same as P/E (both real-time from GOOGLEFINANCE)
-row[cols.TODAY_PE - 1] = `=GOOGLEFINANCE("${ticker}","pe")`;
+// Today P/E (L): Calculate from current Price / EPS
+const cEPS = Utils.colToLetter(cols.EPS);  // M
+row[cols.TODAY_PE - 1] = `=IF(${cEPS}${R}>0,${cPrice}${R}/${cEPS}${R},"")`;
 ```
 
 #### Note:
-- Columns K and L will show identical values (both real-time)
-- Consider removing Today P/E column (L) in future refactor if redundant
+- Column K (P/E) shows GOOGLEFINANCE value
+- Column L (Today P/E) calculates from current Price / EPS
+- This allows comparison between reported P/E vs calculated P/E
 
 ---
 
@@ -458,7 +461,7 @@ Column P (Fwd EPS): =IF(N2>0,B2/N2,"")
 ### After Implementation:
 ```
 Column K (P/E):     =GOOGLEFINANCE("AAPL","pe")
-Column L (Today P/E): =GOOGLEFINANCE("AAPL","pe")
+Column L (Today P/E): =IF(M2>0,B2/M2,"")  ← UPDATED! (Price / EPS)
 Column M (EPS):     =GOOGLEFINANCE("AAPL","eps")  ← NEW!
 Column N (Fwd P/E): =GOOGLEFINANCE("AAPL","forwardpe")  ← NEW!
 Column O (Today Fwd P/E): =GOOGLEFINANCE("AAPL","forwardpe")
@@ -565,6 +568,7 @@ Implementation succeeds when:
 | Metric | Before | After |
 |--------|--------|-------|
 | EPS (M) | `=IF(K>0,B/K,"")` | `=GOOGLEFINANCE("ticker","eps")` |
+| Today P/E (L) | `=GOOGLEFINANCE("ticker","pe")` | `=IF(M>0,B/M,"")` (Price / EPS) |
 | P/E (K) | Alpha Vantage value or GOOGLEFINANCE | `=GOOGLEFINANCE("ticker","pe")` |
 | Fwd P/E (N) | Alpha Vantage value | `=GOOGLEFINANCE("ticker","forwardpe")` |
 | Fwd EPS (P) | `=IF(N>0,B/N,"")` | `=IF(N>0,B/N,"")` (unchanged) |

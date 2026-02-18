@@ -78,9 +78,10 @@ function updateDailyReport(forceUpdateTicker = null) {
           shouldFetchApi = true;
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
-          // Check if cache has fundamental data from Alpha Vantage
-          // Note: EPS, P/E, Forward P/E are now from GOOGLEFINANCE, not in cache
-          const cacheHasData = cache.peg || cache.ps || cache.pb || cache.evEbitda;
+          // Check if cache has fundamental data
+          // Note: EPS and P/E are from GOOGLEFINANCE (not cached)
+          // Forward P/E and Forward EPS are from Finviz (cached)
+          const cacheHasData = cache.peg || cache.ps || cache.pb || cache.evEbitda || cache.fwdPe || cache.fwdEPS;
 
           // Priority 1: If cache has NO fundamental data, fetch immediately (regardless of age)
           if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
@@ -105,18 +106,20 @@ function updateDailyReport(forceUpdateTicker = null) {
           }
         }
 
-        // --- Alpha Vantage Data Retrieval ---
-        // Fetch fundamental data (PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth, etc.)
-        // Note: EPS, P/E, Forward P/E are now from GOOGLEFINANCE (not Alpha Vantage)
+        // --- Data Retrieval Strategy ---
+        // 1. Alpha Vantage: PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth metrics
+        // 2. Finviz: Forward P/E, Forward EPS (ALWAYS fetched, has internal 20-min cache)
+        // 3. GOOGLEFINANCE: EPS, P/E (via formulas in Sheet_Manager)
+
         if (shouldFetchApi) {
+          // Alpha Vantage Overview (fundamentals)
           const overview = AlphaVantageService.getCompanyOverview(ticker);
+
           if (overview && overview.ticker) {
             financialData = {
               ticker: ticker,
               buyPrice: buyPrice,
               quantity: quantity,
-              // pe: removed - now from GOOGLEFINANCE
-              // fwdPe: removed - now from GOOGLEFINANCE
               peg: overview.pegRatio,
               ps: overview.priceToSalesRatio,
               pb: overview.priceToBookRatio,
@@ -141,8 +144,38 @@ function updateDailyReport(forceUpdateTicker = null) {
             Utils.log(`[${ticker}] Alpha Vantage API Fetch Failed (may be ETF or invalid ticker). Falling back to cache.`);
             financialData = cache || {};
           }
+
         } else {
           financialData = cache || {};
+        }
+
+        // Finviz Forward Metrics (ALWAYS fetch - has internal 20-min cache)
+        // This runs regardless of shouldFetchApi to ensure Forward P/E and EPS are always available
+        try {
+          const forwardMetrics = FinvizService.getForwardMetrics(ticker);
+          if (forwardMetrics) {
+            if (forwardMetrics.fwdPe) {
+              financialData.fwdPe = forwardMetrics.fwdPe;
+              Utils.log(`[${ticker}] Finviz Forward P/E = ${forwardMetrics.fwdPe}`);
+            }
+            if (forwardMetrics.fwdEPS) {
+              financialData.fwdEPS = forwardMetrics.fwdEPS;
+              Utils.log(`[${ticker}] Finviz Forward EPS = ${forwardMetrics.fwdEPS}`);
+            }
+          }
+          // Note: No rate limiting needed for Finviz (free HTML scraping)
+          // Cache is handled internally by FinvizService (20-min TTL)
+        } catch (finvizError) {
+          Utils.log(`[${ticker}] Finviz fetch error: ${finvizError.message}`);
+          // Fall back to cache for Forward metrics
+          if (cache && cache.fwdPe) {
+            financialData.fwdPe = cache.fwdPe;
+            Utils.log(`[${ticker}] Using cached Forward P/E = ${cache.fwdPe}`);
+          }
+          if (cache && cache.fwdEPS) {
+            financialData.fwdEPS = cache.fwdEPS;
+            Utils.log(`[${ticker}] Using cached Forward EPS = ${cache.fwdEPS}`);
+          }
         }
 
         // Ensure required fields are set

@@ -112,9 +112,10 @@ const SheetManager = {
    * Called BEFORE initDashboard() clears the sheet. Skips TOTAL row.
    *
    * DATA SOURCE NOTES:
-   * - EPS: NOT CACHED (calculated via formula Price/P/E, always real-time)
-   * - Forward EPS: NOT CACHED (calculated via formula Price/Forward P/E, always real-time)
-   * - P/E, Forward P/E: CACHED (from Alpha Vantage and GOOGLEFINANCE)
+   * - EPS: NOT CACHED (direct from GOOGLEFINANCE, always real-time)
+   * - P/E: NOT CACHED (direct from GOOGLEFINANCE, always real-time)
+   * - Forward P/E: CACHED (from Finviz, updated every 7 days)
+   * - Forward EPS: CACHED (from Finviz "EPS next Y", updated every 7 days)
    * - All other fundamentals: CACHED (from Alpha Vantage, updated every 7 days)
    *
    * @return {Object} Map of ticker -> cached financial data
@@ -144,10 +145,10 @@ const SheetManager = {
       const ticker = row[cols.TICKER - 1];
       if (ticker && ticker !== 'TOTAL') {
         dashboardMap[ticker] = {
-          // NOTE: 'eps' and 'forwardEPS' removed - both calculated via formulas, don't need caching
+          // NOTE: 'eps' and 'pe' NOT CACHED - direct from GOOGLEFINANCE (real-time)
           price: toValue(row[cols.PRICE - 1]),
-          pe: toValue(row[cols.PE - 1]),
-          fwdPe: toValue(row[cols.FWD_PE - 1]),  // From Alpha Vantage
+          fwdPe: toValue(row[cols.FWD_PE - 1]),  // From Finviz
+          fwdEPS: toValue(row[cols.FWD_EPS - 1]), // From Finviz "EPS next Y"
           peg: toValue(row[cols.PEG - 1]),
           ps: toValue(row[cols.PS - 1]),
           pb: toValue(row[cols.PB - 1]),
@@ -315,20 +316,20 @@ const SheetManager = {
     // EPS: Direct from GOOGLEFINANCE (simpler and more reliable)
     row[cols.EPS - 1] = `=GOOGLEFINANCE("${ticker}","eps")`;
 
-    // Today P/E: Same as P/E (both real-time from GOOGLEFINANCE)
-    row[cols.TODAY_PE - 1] = peFormulaLive;
+    // Today P/E: Calculate from current Price / EPS
+    const cEPS = Utils.colToLetter(cols.EPS);  // M
+    row[cols.TODAY_PE - 1] = `=IF(${cEPS}${R}>0,${cPrice}${R}/${cEPS}${R},"")`;
 
-    // Forward P/E: Direct from GOOGLEFINANCE (real-time)
-    const fwdPeFormulaLive = `=GOOGLEFINANCE("${ticker}","forwardpe")`;
-    row[cols.FWD_PE - 1] = fwdPeFormulaLive;
+    // Forward P/E: From Finviz (cached value, updated every 7 days)
+    row[cols.FWD_PE - 1] = v(data.fwdPe);
 
-    // Forward EPS: Calculate from Price and Forward P/E using formula
-    // Forward EPS = Price / Forward P/E
-    const cFwdPE = Utils.colToLetter(cols.FWD_PE);  // N
-    row[cols.FWD_EPS - 1] = `=IF(${cFwdPE}${R}>0,${cPrice}${R}/${cFwdPE}${R},"")`;
+    // Forward EPS: From Finviz "EPS next Y" (cached value, updated every 7 days)
+    row[cols.FWD_EPS - 1] = v(data.fwdEPS);
 
-    // Today Fwd P/E: Same as Fwd P/E (both real-time from GOOGLEFINANCE)
-    row[cols.TODAY_FWD_PE - 1] = fwdPeFormulaLive;
+    // Today Fwd P/E: Calculate from current Price / Forward EPS
+    // This gives real-time P/E based on current price
+    const cFwdEPS = Utils.colToLetter(cols.FWD_EPS);  // P
+    row[cols.TODAY_FWD_PE - 1] = `=IF(${cFwdEPS}${R}>0,${cPrice}${R}/${cFwdEPS}${R},"")`;
 
     row[cols.PEG - 1] = v(data.peg);
     row[cols.PS - 1] = v(data.ps);
