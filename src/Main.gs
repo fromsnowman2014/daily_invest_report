@@ -163,8 +163,8 @@ function updateDailyReport(forceUpdateTicker = null) {
               Utils.log(`[${ticker}] Finviz Forward EPS = ${forwardMetrics.fwdEPS}`);
             }
           }
-          // Note: No rate limiting needed for Finviz (free HTML scraping)
-          // Cache is handled internally by FinvizService (20-min TTL)
+          // Finviz rate limiting: 11s between requests to avoid being blocked
+          Utilities.sleep(11000);
         } catch (finvizError) {
           Utils.log(`[${ticker}] Finviz fetch error: ${finvizError.message}`);
           // Fall back to cache for Forward metrics
