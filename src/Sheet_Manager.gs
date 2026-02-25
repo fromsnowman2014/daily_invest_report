@@ -276,23 +276,24 @@ const SheetManager = {
     const cMktValue = Utils.colToLetter(cols.MARKET_VALUE); // F
 
     // GOOGLEFINANCE Formulas
+    // Note: We don't wrap these in IFERROR to preserve "Loading..." state and show real errors as #N/A
     const priceFormula = `=GOOGLEFINANCE("${ticker}","price")`;
     const changePctFormula = `=GOOGLEFINANCE("${ticker}","changepct")/100`;
     const marketCapFormula = `=GOOGLEFINANCE("${ticker}","marketcap")`;
     const peFormulaLive = `=GOOGLEFINANCE("${ticker}","pe")`;
 
-    // Calculated Formulas
+    // Calculated Formulas (wrapped to handle empty GOOGLEFINANCE values)
     const marketValueFormula = quantity > 0
-      ? `=${cPrice}${R}*${quantity}`
+      ? `=IFERROR(${cPrice}${R}*${quantity},"")`
       : '';
     const dayChangeFormula = (quantity > 0)
-      ? `=IFERROR(${cMktValue}${R}*${cChangePct}${R}/(1+${cChangePct}${R}),0)`
+      ? `=IFERROR(${cMktValue}${R}*${cChangePct}${R}/(1+${cChangePct}${R}),"")`
       : '';
     const gainLossPctFormula = costBasis > 0
-      ? `=IF(${cCostBasis}${R}>0,(${cMktValue}${R}-${cCostBasis}${R})/${cCostBasis}${R},"")`
+      ? `=IF(${cCostBasis}${R}>0,IFERROR((${cMktValue}${R}-${cCostBasis}${R})/${cCostBasis}${R},""),"")`
       : '';
     const gainLossAbsFormula = costBasis > 0
-      ? `=${cMktValue}${R}-${cCostBasis}${R}`
+      ? `=IFERROR(${cMktValue}${R}-${cCostBasis}${R},"")`
       : '';
 
     // Build row
@@ -316,9 +317,9 @@ const SheetManager = {
     // EPS: Direct from GOOGLEFINANCE (simpler and more reliable)
     row[cols.EPS - 1] = `=GOOGLEFINANCE("${ticker}","eps")`;
 
-    // Today P/E: Calculate from current Price / EPS
+    // Today P/E: Calculate from current Price / EPS (with protection for empty values)
     const cEPS = Utils.colToLetter(cols.EPS);  // M
-    row[cols.TODAY_PE - 1] = `=IF(${cEPS}${R}>0,${cPrice}${R}/${cEPS}${R},"")`;
+    row[cols.TODAY_PE - 1] = `=IF(AND(ISNUMBER(${cPrice}${R}),ISNUMBER(${cEPS}${R}),${cEPS}${R}>0),${cPrice}${R}/${cEPS}${R},"")`;
 
     // Forward P/E: From Finviz (cached value, updated every 7 days)
     row[cols.FWD_PE - 1] = v(data.fwdPe);
@@ -326,10 +327,10 @@ const SheetManager = {
     // Forward EPS: From Finviz "EPS next Y" (cached value, updated every 7 days)
     row[cols.FWD_EPS - 1] = v(data.fwdEPS);
 
-    // Today Fwd P/E: Calculate from current Price / Forward EPS
+    // Today Fwd P/E: Calculate from current Price / Forward EPS (with protection for empty values)
     // This gives real-time P/E based on current price
     const cFwdEPS = Utils.colToLetter(cols.FWD_EPS);  // P
-    row[cols.TODAY_FWD_PE - 1] = `=IF(${cFwdEPS}${R}>0,${cPrice}${R}/${cFwdEPS}${R},"")`;
+    row[cols.TODAY_FWD_PE - 1] = `=IF(AND(ISNUMBER(${cPrice}${R}),ISNUMBER(${cFwdEPS}${R}),${cFwdEPS}${R}>0),${cPrice}${R}/${cFwdEPS}${R},"")`;
 
     row[cols.PEG - 1] = v(data.peg);
     row[cols.PS - 1] = v(data.ps);
@@ -366,15 +367,17 @@ const SheetManager = {
     const S = 2;              // First stock row
     const E = T - 1;          // Last stock row
 
-    const cDayChange = Utils.colToLetter(cols.DAY_CHANGE_ABS);
-    const cCostBasis = Utils.colToLetter(cols.COST_BASIS);
-    const cMktValue = Utils.colToLetter(cols.MARKET_VALUE);
-    const cGainAbs = Utils.colToLetter(cols.GAIN_LOSS_ABS);
-    const cWeightPct = Utils.colToLetter(cols.WEIGHT_PCT);
+    const cDayChange = Utils.colToLetter(cols.DAY_CHANGE_ABS);  // D
+    const cCostBasis = Utils.colToLetter(cols.COST_BASIS);      // E
+    const cMktValue = Utils.colToLetter(cols.MARKET_VALUE);     // F
+    const cGainAbs = Utils.colToLetter(cols.GAIN_LOSS_ABS);     // H
+    const cWeightPct = Utils.colToLetter(cols.WEIGHT_PCT);      // I
 
     const row = new Array(colCount).fill('');
 
     row[cols.TICKER - 1] = 'TOTAL';
+    // Change %: Day Change $ / Market Value (shows portfolio daily change %)
+    row[cols.CHANGE_PCT - 1] = `=IF(${cMktValue}${T}>0,${cDayChange}${T}/${cMktValue}${T},"")`;
     row[cols.DAY_CHANGE_ABS - 1] = `=SUM(${cDayChange}${S}:${cDayChange}${E})`;
     row[cols.COST_BASIS - 1] = `=SUM(${cCostBasis}${S}:${cCostBasis}${E})`;
     row[cols.MARKET_VALUE - 1] = `=SUM(${cMktValue}${S}:${cMktValue}${E})`;

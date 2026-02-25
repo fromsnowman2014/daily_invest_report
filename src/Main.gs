@@ -46,6 +46,10 @@ function updateDailyReport(forceUpdateTicker = null) {
     const aggregated = aggregateStockList(stockList);
     Utils.log(`Found ${aggregated.length} unique tickers from ${stockList.length} entries.`);
 
+    // 1.6. Sort by ticker name (ascending order) for consistent Dashboard display
+    aggregated.sort((a, b) => a.ticker.localeCompare(b.ticker));
+    Utils.log('Tickers sorted alphabetically.');
+
     // 2. Read Existing Dashboard Data (Caching) - BEFORE clearing
     const cachedData = SheetManager.getDashboardData();
 
@@ -53,12 +57,18 @@ function updateDailyReport(forceUpdateTicker = null) {
     SheetManager.backupDashboard();
 
     // 3. Initialize Dashboard (Clear previous data + Pre-format rows)
+    // Filter stocks with quantity > 0 for Dashboard display
+    const dashboardStocks = aggregated.filter(stock => stock.totalQuantity > 0);
+    Utils.log(`Dashboard will show ${dashboardStocks.length} stocks (quantity > 0). ${aggregated.length - dashboardStocks.length} zero-quantity stocks will only be logged.`);
+
     // Optimization: Only format the rows we need (stocks + total + buffer)
-    SheetManager.initDashboard(null, aggregated.length + 5);
+    SheetManager.initDashboard(null, dashboardStocks.length + 5);
 
     let apiCallsMade = 0;
+    const allStocksFinancialData = {}; // Store ALL stocks data for logging (including zero-quantity)
 
     // ============ Phase 1: Write Dashboard Stock Rows ============
+    // Process ALL stocks for data collection, but only add non-zero quantity to Dashboard
     aggregated.forEach((stock) => {
       try {
         const ticker = stock.ticker;
@@ -183,20 +193,28 @@ function updateDailyReport(forceUpdateTicker = null) {
         financialData.buyPrice = buyPrice;
         financialData.quantity = quantity;
 
-        SheetManager.appendDashboardRow(financialData);
+        // Store data for ALL stocks (for logging in Phase 2)
+        allStocksFinancialData[ticker] = financialData;
+
+        // Only append to Dashboard if quantity > 0
+        if (quantity > 0) {
+          SheetManager.appendDashboardRow(financialData);
+        } else {
+          Utils.log(`[${ticker}] Quantity is 0. Skipping Dashboard entry (will still be logged).`);
+        }
 
       } catch (stockError) {
         Utils.log(`Error processing ${stock.ticker}: ${stockError.message}`);
       }
     });
 
-    // Add TOTAL summary row + set Weight % formulas
-    const totalRowIdx = SheetManager.appendDashboardTotalRow(aggregated.length);
-    SheetManager.setDashboardWeightFormulas(aggregated.length, totalRowIdx);
+    // Add TOTAL summary row + set Weight % formulas (only for displayed stocks)
+    const totalRowIdx = SheetManager.appendDashboardTotalRow(dashboardStocks.length);
+    SheetManager.setDashboardWeightFormulas(dashboardStocks.length, totalRowIdx);
     
 
-    
-    Utils.log(`Dashboard complete: ${aggregated.length} stocks + TOTAL row.`);
+
+    Utils.log(`Dashboard complete: ${dashboardStocks.length} stocks + TOTAL row.`);
 
     // ============ Phase 2: Flush & Write Log Entries ============
     SpreadsheetApp.flush();
@@ -216,9 +234,16 @@ function updateDailyReport(forceUpdateTicker = null) {
     // Market is open - proceed with Log updates
     Utils.log('Market is OPEN. Proceeding with Log_ticker updates...');
 
-    Object.keys(freshData).forEach(ticker => {
+    // Log ALL stocks (including zero-quantity stocks not in Dashboard)
+    Object.keys(allStocksFinancialData).forEach(ticker => {
       try {
-        SheetManager.appendLogRow(ticker, freshData[ticker]);
+        // Merge Dashboard values (if exists) with collected financial data
+        // Dashboard values have calculated fields (weightPct, etc.)
+        const dataToLog = freshData[ticker]
+          ? { ...allStocksFinancialData[ticker], ...freshData[ticker] }
+          : allStocksFinancialData[ticker];
+
+        SheetManager.appendLogRow(ticker, dataToLog);
       } catch (logError) {
         Utils.log(`Error writing log for ${ticker}: ${logError.message}`);
       }
