@@ -234,6 +234,80 @@ const SheetManager = {
   },
 
   /**
+   * Fetches real-time GOOGLEFINANCE data for a ticker (used for zero-quantity stocks not in Dashboard).
+   * Returns only essential metrics: price, changePct, marketCap, pe, eps.
+   * @param {string} ticker The stock ticker symbol.
+   * @return {Object} Real-time financial data or null if fetch fails.
+   */
+  fetchRealtimeData: function(ticker) {
+    try {
+      const price = SpreadsheetApp.newCellImage().build();  // Placeholder to trigger GOOGLEFINANCE
+
+      // Fetch real-time data using GOOGLEFINANCE
+      const priceVal = this.getGoogleFinanceValue(ticker, 'price');
+      const changePctVal = this.getGoogleFinanceValue(ticker, 'changepct');
+      const marketCapVal = this.getGoogleFinanceValue(ticker, 'marketcap');
+      const peVal = this.getGoogleFinanceValue(ticker, 'pe');
+      const epsVal = this.getGoogleFinanceValue(ticker, 'eps');
+
+      return {
+        price: priceVal,
+        changePct: changePctVal ? changePctVal / 100 : null,  // Convert to decimal
+        marketCap: marketCapVal,
+        pe: peVal,
+        eps: epsVal,
+        // Calculated fields (zero-quantity stocks have no portfolio impact)
+        dayChangeAbs: 0,
+        costBasis: 0,
+        marketValue: 0,
+        gainLossPct: null,
+        gainLossAbs: 0,
+        weightPct: 0,
+        todayPe: (priceVal && epsVal && epsVal > 0) ? priceVal / epsVal : null
+      };
+    } catch (error) {
+      Utils.log(`[${ticker}] Failed to fetch realtime data: ${error.message}`);
+      return null;
+    }
+  },
+
+  /**
+   * Helper: Gets a single GOOGLEFINANCE value synchronously.
+   * Uses a temporary sheet cell to evaluate the formula.
+   * @param {string} ticker The stock ticker symbol.
+   * @param {string} attribute The GOOGLEFINANCE attribute (price, changepct, etc.).
+   * @return {number|null} The value or null if unavailable.
+   */
+  getGoogleFinanceValue: function(ticker, attribute) {
+    try {
+      const ss = this.getSpreadsheet();
+      let tempSheet = ss.getSheetByName('_TempGoogleFinance');
+
+      if (!tempSheet) {
+        tempSheet = ss.insertSheet('_TempGoogleFinance');
+        tempSheet.hideSheet();  // Hide from user view
+      }
+
+      const formula = `=GOOGLEFINANCE("${ticker}","${attribute}")`;
+      const cell = tempSheet.getRange('A1');
+      cell.setFormula(formula);
+      SpreadsheetApp.flush();  // Wait for formula to resolve
+
+      const value = cell.getValue();
+
+      // Check if value is valid
+      if (typeof value === 'number' && !isNaN(value)) {
+        return value;
+      }
+
+      return null;
+    } catch (error) {
+      Utils.log(`[${ticker}] GOOGLEFINANCE(${attribute}) error: ${error.message}`);
+      return null;
+    }
+  },
+
+  /**
    * Initializes or Clears the Dashboard sheet structure.
    * @param {Sheet} [targetSheet] Optional sheet object to initialize (for testing).
    * @param {number} [expectedRows] Optional number of rows to format (optimization).

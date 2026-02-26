@@ -65,6 +65,7 @@ function updateDailyReport(forceUpdateTicker = null) {
     SheetManager.initDashboard(null, dashboardStocks.length + 5);
 
     let apiCallsMade = 0;
+    let actualDashboardRowCount = 0; // Track actual appended rows (handles errors gracefully)
     const allStocksFinancialData = {}; // Store ALL stocks data for logging (including zero-quantity)
 
     // ============ Phase 1: Write Dashboard Stock Rows ============
@@ -172,9 +173,16 @@ function updateDailyReport(forceUpdateTicker = null) {
               financialData.fwdEPS = forwardMetrics.fwdEPS;
               Utils.log(`[${ticker}] Finviz Forward EPS = ${forwardMetrics.fwdEPS}`);
             }
+
+            // Finviz rate limiting: Only delay if we actually fetched from web (not from cache)
+            // Reduced from 11s to 3s based on web scraping best practices (conservative for unofficial API)
+            if (!forwardMetrics.fromCache) {
+              Utils.log(`[${ticker}] Finviz web fetch detected. Applying 3s rate limit delay...`);
+              Utilities.sleep(3000);
+            } else {
+              Utils.log(`[${ticker}] Finviz cache hit. No delay needed.`);
+            }
           }
-          // Finviz rate limiting: 11s between requests to avoid being blocked
-          Utilities.sleep(11000);
         } catch (finvizError) {
           Utils.log(`[${ticker}] Finviz fetch error: ${finvizError.message}`);
           // Fall back to cache for Forward metrics
@@ -199,6 +207,7 @@ function updateDailyReport(forceUpdateTicker = null) {
         // Only append to Dashboard if quantity > 0
         if (quantity > 0) {
           SheetManager.appendDashboardRow(financialData);
+          actualDashboardRowCount++; // Increment only after successful append
         } else {
           Utils.log(`[${ticker}] Quantity is 0. Skipping Dashboard entry (will still be logged).`);
         }
@@ -209,12 +218,13 @@ function updateDailyReport(forceUpdateTicker = null) {
     });
 
     // Add TOTAL summary row + set Weight % formulas (only for displayed stocks)
-    const totalRowIdx = SheetManager.appendDashboardTotalRow(dashboardStocks.length);
-    SheetManager.setDashboardWeightFormulas(dashboardStocks.length, totalRowIdx);
-    
+    // Use actualDashboardRowCount instead of dashboardStocks.length for accuracy
+    const totalRowIdx = SheetManager.appendDashboardTotalRow(actualDashboardRowCount);
+    SheetManager.setDashboardWeightFormulas(actualDashboardRowCount, totalRowIdx);
 
 
-    Utils.log(`Dashboard complete: ${dashboardStocks.length} stocks + TOTAL row.`);
+
+    Utils.log(`Dashboard complete: ${actualDashboardRowCount} stocks + TOTAL row.`);
 
     // ============ Phase 2: Flush & Write Log Entries ============
     SpreadsheetApp.flush();
@@ -237,11 +247,25 @@ function updateDailyReport(forceUpdateTicker = null) {
     // Log ALL stocks (including zero-quantity stocks not in Dashboard)
     Object.keys(allStocksFinancialData).forEach(ticker => {
       try {
-        // Merge Dashboard values (if exists) with collected financial data
-        // Dashboard values have calculated fields (weightPct, etc.)
-        const dataToLog = freshData[ticker]
-          ? { ...allStocksFinancialData[ticker], ...freshData[ticker] }
-          : allStocksFinancialData[ticker];
+        let dataToLog;
+
+        if (freshData[ticker]) {
+          // Stock is in Dashboard (quantity > 0): use Dashboard values
+          dataToLog = { ...allStocksFinancialData[ticker], ...freshData[ticker] };
+        } else {
+          // Stock NOT in Dashboard (quantity = 0): fetch real-time data separately
+          Utils.log(`[${ticker}] Quantity is 0. Fetching real-time data for Log entry...`);
+          const realtimeData = SheetManager.fetchRealtimeData(ticker);
+
+          if (realtimeData) {
+            // Merge fundamental data with real-time GOOGLEFINANCE data
+            dataToLog = { ...allStocksFinancialData[ticker], ...realtimeData };
+          } else {
+            // If GOOGLEFINANCE fetch fails, log with fundamental data only
+            Utils.log(`[${ticker}] Real-time fetch failed. Logging with fundamental data only.`);
+            dataToLog = allStocksFinancialData[ticker];
+          }
+        }
 
         SheetManager.appendLogRow(ticker, dataToLog);
       } catch (logError) {

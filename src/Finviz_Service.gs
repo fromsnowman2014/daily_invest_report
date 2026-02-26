@@ -122,12 +122,12 @@ const FinvizService = {
    * Gets both Forward P/E and Forward EPS in one call (optimization).
    * Fetches HTML once and extracts both metrics.
    * @param {string} ticker Stock ticker symbol.
-   * @return {Object} Object with fwdPe and fwdEPS properties.
+   * @return {Object} Object with fwdPe, fwdEPS, and fromCache properties.
    */
   getForwardMetrics: function(ticker) {
     if (!ticker) {
       Utils.log(`[Finviz] Error: Missing ticker`);
-      return { fwdPe: null, fwdEPS: null };
+      return { fwdPe: null, fwdEPS: null, fromCache: false };
     }
 
     const cacheKeyPE = `FINVIZ_${ticker}_Forward P/E`;
@@ -142,7 +142,8 @@ const FinvizService = {
       Utils.log(`[${ticker}] Forward metrics from cache: PE=${cachedPE}, EPS=${cachedEPS}`);
       return {
         fwdPe: parseFloat(cachedPE),
-        fwdEPS: parseFloat(cachedEPS)
+        fwdEPS: parseFloat(cachedEPS),
+        fromCache: true
       };
     }
 
@@ -178,11 +179,11 @@ const FinvizService = {
 
       Utils.log(`[${ticker}] Forward P/E = ${fwdPe}, Forward EPS = ${fwdEPS}`);
 
-      return { fwdPe, fwdEPS };
+      return { fwdPe, fwdEPS, fromCache: false };
 
     } catch (error) {
       Utils.log(`[Finviz] Fetch error for ${ticker}: ${error.message}`);
-      return { fwdPe: null, fwdEPS: null };
+      return { fwdPe: null, fwdEPS: null, fromCache: false };
     }
   }
 };
