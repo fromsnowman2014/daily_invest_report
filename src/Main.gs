@@ -10,7 +10,7 @@
 
 // Rotation Configuration
 const ROTATION_INTERVAL_DAYS = 7;  // Alpha Vantage: Rotate fundamental data every 7 days
-const MAX_DAILY_API_CALLS = 20;    // Alpha Vantage: Safe limit below 25 calls/day
+const MAX_DAILY_API_CALLS = 25;    // Alpha Vantage: Safe limit below 25 calls/day
 
 /**
  * Creates the Daily Invest Report menu on open.
@@ -325,7 +325,7 @@ function createTimeDrivenTrigger() {
       .inTimezone('America/Los_Angeles')
       .everyDays(1)
       .create();
-
+/** disable to reduce API calls 2/24
   // Create trigger for ~3:01 PM Pacific Time
   ScriptApp.newTrigger('updateDailyReport')
       .timeBased()
@@ -334,8 +334,8 @@ function createTimeDrivenTrigger() {
       .inTimezone('America/Los_Angeles')
       .everyDays(1)
       .create();
-
-  Utils.log('Daily Triggers set for ~6:31 AM and ~3:01 PM Pacific Time (America/Los_Angeles).');
+*/
+  Utils.log('Daily Triggers set for ~6:31 AM Pacific Time (America/Los_Angeles).');
 }
 
 /**
