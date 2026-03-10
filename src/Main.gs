@@ -90,9 +90,8 @@ function updateDailyReport(forceUpdateTicker = null) {
           Utils.log(`[${ticker}] New stock detected.`);
         } else {
           // Check if cache has fundamental data
-          // Note: EPS and P/E are from GOOGLEFINANCE (not cached)
-          // Forward P/E and Forward EPS are from Finviz (cached)
-          const cacheHasData = cache.peg || cache.ps || cache.pb || cache.evEbitda || cache.fwdPe || cache.fwdEPS;
+          // All metrics are now cached (P/E, EPS, Forward P/E, Forward EPS from Finviz; others from Alpha Vantage)
+          const cacheHasData = cache.pe || cache.eps || cache.peg || cache.ps || cache.pb || cache.evEbitda || cache.fwdPe || cache.fwdEPS;
 
           // Priority 1: If cache has NO fundamental data, fetch immediately (regardless of age)
           if (!cacheHasData && apiCallsMade < MAX_DAILY_API_CALLS) {
@@ -118,9 +117,9 @@ function updateDailyReport(forceUpdateTicker = null) {
         }
 
         // --- Data Retrieval Strategy ---
-        // 1. Alpha Vantage: PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth metrics
-        // 2. Finviz: Forward P/E, Forward EPS (ALWAYS fetched, has internal 20-min cache)
-        // 3. GOOGLEFINANCE: EPS, P/E (via formulas in Sheet_Manager)
+        // 1. Alpha Vantage: PEG, P/S, P/B, EV/EBITDA, margins, ROE, ROIC, growth metrics (updated every 7 days)
+        // 2. Finviz: P/E, EPS, Forward P/E, Forward EPS (ALWAYS fetched, has internal 20-min cache)
+        // 3. GOOGLEFINANCE: Price, Change %, Market Cap (real-time via formulas)
 
         if (shouldFetchApi) {
           // Alpha Vantage Overview (fundamentals)
@@ -160,23 +159,32 @@ function updateDailyReport(forceUpdateTicker = null) {
           financialData = cache || {};
         }
 
-        // Finviz Forward Metrics (ALWAYS fetch - has internal 20-min cache)
-        // This runs regardless of shouldFetchApi to ensure Forward P/E and EPS are always available
+        // Finviz Metrics (ALWAYS fetch - has internal 20-min cache)
+        // Fetches: P/E, EPS, Forward P/E, Forward EPS (all in one HTML call)
         try {
-          const forwardMetrics = FinvizService.getForwardMetrics(ticker);
-          if (forwardMetrics) {
-            if (forwardMetrics.fwdPe) {
-              financialData.fwdPe = forwardMetrics.fwdPe;
-              Utils.log(`[${ticker}] Finviz Forward P/E = ${forwardMetrics.fwdPe}`);
+          const finvizMetrics = FinvizService.getForwardMetrics(ticker);
+          if (finvizMetrics) {
+            // Store all 4 metrics from Finviz
+            if (finvizMetrics.pe) {
+              financialData.pe = finvizMetrics.pe;
+              Utils.log(`[${ticker}] Finviz P/E = ${finvizMetrics.pe}`);
             }
-            if (forwardMetrics.fwdEPS) {
-              financialData.fwdEPS = forwardMetrics.fwdEPS;
-              Utils.log(`[${ticker}] Finviz Forward EPS = ${forwardMetrics.fwdEPS}`);
+            if (finvizMetrics.eps) {
+              financialData.eps = finvizMetrics.eps;
+              Utils.log(`[${ticker}] Finviz EPS = ${finvizMetrics.eps}`);
+            }
+            if (finvizMetrics.fwdPe) {
+              financialData.fwdPe = finvizMetrics.fwdPe;
+              Utils.log(`[${ticker}] Finviz Forward P/E = ${finvizMetrics.fwdPe}`);
+            }
+            if (finvizMetrics.fwdEPS) {
+              financialData.fwdEPS = finvizMetrics.fwdEPS;
+              Utils.log(`[${ticker}] Finviz Forward EPS = ${finvizMetrics.fwdEPS}`);
             }
 
             // Finviz rate limiting: Only delay if we actually fetched from web (not from cache)
-            // Reduced from 11s to 3s based on web scraping best practices (conservative for unofficial API)
-            if (!forwardMetrics.fromCache) {
+            // 3 seconds for web scraping (conservative for unofficial API)
+            if (!finvizMetrics.fromCache) {
               Utils.log(`[${ticker}] Finviz web fetch detected. Applying 3s rate limit delay...`);
               Utilities.sleep(3000);
             } else {
@@ -185,7 +193,15 @@ function updateDailyReport(forceUpdateTicker = null) {
           }
         } catch (finvizError) {
           Utils.log(`[${ticker}] Finviz fetch error: ${finvizError.message}`);
-          // Fall back to cache for Forward metrics
+          // Fall back to cache for all Finviz metrics
+          if (cache && cache.pe) {
+            financialData.pe = cache.pe;
+            Utils.log(`[${ticker}] Using cached P/E = ${cache.pe}`);
+          }
+          if (cache && cache.eps) {
+            financialData.eps = cache.eps;
+            Utils.log(`[${ticker}] Using cached EPS = ${cache.eps}`);
+          }
           if (cache && cache.fwdPe) {
             financialData.fwdPe = cache.fwdPe;
             Utils.log(`[${ticker}] Using cached Forward P/E = ${cache.fwdPe}`);

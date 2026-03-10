@@ -112,10 +112,10 @@ const SheetManager = {
    * Called BEFORE initDashboard() clears the sheet. Skips TOTAL row.
    *
    * DATA SOURCE NOTES:
-   * - EPS: NOT CACHED (direct from GOOGLEFINANCE, always real-time)
-   * - P/E: NOT CACHED (direct from GOOGLEFINANCE, always real-time)
-   * - Forward P/E: CACHED (from Finviz, updated every 7 days)
-   * - Forward EPS: CACHED (from Finviz "EPS next Y", updated every 7 days)
+   * - P/E: CACHED (from Finviz, 20-minute cache)
+   * - EPS: CACHED (from Finviz, 20-minute cache)
+   * - Forward P/E: CACHED (from Finviz, 20-minute cache)
+   * - Forward EPS: CACHED (from Finviz "EPS next Y", 20-minute cache)
    * - All other fundamentals: CACHED (from Alpha Vantage, updated every 7 days)
    *
    * @return {Object} Map of ticker -> cached financial data
@@ -145,8 +145,9 @@ const SheetManager = {
       const ticker = row[cols.TICKER - 1];
       if (ticker && ticker !== 'TOTAL') {
         dashboardMap[ticker] = {
-          // NOTE: 'eps' and 'pe' NOT CACHED - direct from GOOGLEFINANCE (real-time)
           price: toValue(row[cols.PRICE - 1]),
+          pe: toValue(row[cols.PE - 1]),        // From Finviz (cached)
+          eps: toValue(row[cols.EPS - 1]),      // From Finviz (cached)
           fwdPe: toValue(row[cols.FWD_PE - 1]),  // From Finviz
           fwdEPS: toValue(row[cols.FWD_EPS - 1]), // From Finviz "EPS next Y"
           peg: toValue(row[cols.PEG - 1]),
@@ -236,35 +237,79 @@ const SheetManager = {
   /**
    * Fetches real-time GOOGLEFINANCE data for a ticker (used for zero-quantity stocks not in Dashboard).
    * Returns only essential metrics: price, changePct, marketCap, pe, eps.
+   * Uses batch fetching with timeout protection.
    * @param {string} ticker The stock ticker symbol.
    * @return {Object} Real-time financial data or null if fetch fails.
    */
   fetchRealtimeData: function(ticker) {
+    Utils.log(`[${ticker}] Fetching real-time GOOGLEFINANCE data...`);
+
     try {
-      const price = SpreadsheetApp.newCellImage().build();  // Placeholder to trigger GOOGLEFINANCE
+      const ss = this.getSpreadsheet();
+      let tempSheet = ss.getSheetByName('_TempGoogleFinance');
 
-      // Fetch real-time data using GOOGLEFINANCE
-      const priceVal = this.getGoogleFinanceValue(ticker, 'price');
-      const changePctVal = this.getGoogleFinanceValue(ticker, 'changepct');
-      const marketCapVal = this.getGoogleFinanceValue(ticker, 'marketcap');
-      const peVal = this.getGoogleFinanceValue(ticker, 'pe');
-      const epsVal = this.getGoogleFinanceValue(ticker, 'eps');
+      if (!tempSheet) {
+        tempSheet = ss.insertSheet('_TempGoogleFinance');
+        tempSheet.hideSheet();
+        Utils.log(`[${ticker}] Created hidden _TempGoogleFinance sheet`);
+      }
 
-      return {
-        price: priceVal,
-        changePct: changePctVal ? changePctVal / 100 : null,  // Convert to decimal
-        marketCap: marketCapVal,
-        pe: peVal,
-        eps: epsVal,
-        // Calculated fields (zero-quantity stocks have no portfolio impact)
-        dayChangeAbs: 0,
-        costBasis: 0,
-        marketValue: 0,
-        gainLossPct: null,
-        gainLossAbs: 0,
-        weightPct: 0,
-        todayPe: (priceVal && epsVal && epsVal > 0) ? priceVal / epsVal : null
-      };
+      // Clear previous data to avoid stale "Loading..." states
+      tempSheet.clear();
+
+      // Set all formulas at once (batch operation)
+      const formulas = [
+        [`=GOOGLEFINANCE("${ticker}","price")`],
+        [`=GOOGLEFINANCE("${ticker}","changepct")`],
+        [`=GOOGLEFINANCE("${ticker}","marketcap")`],
+        [`=GOOGLEFINANCE("${ticker}","pe")`],
+        [`=GOOGLEFINANCE("${ticker}","eps")`]
+      ];
+
+      tempSheet.getRange(1, 1, 5, 1).setFormulas(formulas);
+      Utils.log(`[${ticker}] Set GOOGLEFINANCE formulas, flushing...`);
+
+      // Flush and wait with timeout protection
+      SpreadsheetApp.flush();
+
+      // Add a small delay to allow GOOGLEFINANCE to resolve (but don't wait forever)
+      Utilities.sleep(2000);  // 2 seconds max wait
+
+      Utils.log(`[${ticker}] Reading values after flush...`);
+
+      // Read all values at once
+      const values = tempSheet.getRange(1, 1, 5, 1).getValues();
+
+      const priceVal = this.parseGoogleFinanceValue(values[0][0], ticker, 'price');
+      const changePctVal = this.parseGoogleFinanceValue(values[1][0], ticker, 'changepct');
+      const marketCapVal = this.parseGoogleFinanceValue(values[2][0], ticker, 'marketcap');
+      const peVal = this.parseGoogleFinanceValue(values[3][0], ticker, 'pe');
+      const epsVal = this.parseGoogleFinanceValue(values[4][0], ticker, 'eps');
+
+      Utils.log(`[${ticker}] Parsed values: price=${priceVal}, changePct=${changePctVal}, marketCap=${marketCapVal}, pe=${peVal}, eps=${epsVal}`);
+
+      // If we got at least price, consider it successful
+      if (priceVal !== null) {
+        return {
+          price: priceVal,
+          changePct: changePctVal ? changePctVal / 100 : null,
+          marketCap: marketCapVal,
+          pe: peVal,
+          eps: epsVal,
+          // Calculated fields (zero-quantity stocks have no portfolio impact)
+          dayChangeAbs: 0,
+          costBasis: 0,
+          marketValue: 0,
+          gainLossPct: null,
+          gainLossAbs: 0,
+          weightPct: 0,
+          todayPe: (priceVal && epsVal && epsVal > 0) ? priceVal / epsVal : null
+        };
+      } else {
+        Utils.log(`[${ticker}] No valid price data received from GOOGLEFINANCE`);
+        return null;
+      }
+
     } catch (error) {
       Utils.log(`[${ticker}] Failed to fetch realtime data: ${error.message}`);
       return null;
@@ -272,39 +317,33 @@ const SheetManager = {
   },
 
   /**
-   * Helper: Gets a single GOOGLEFINANCE value synchronously.
-   * Uses a temporary sheet cell to evaluate the formula.
-   * @param {string} ticker The stock ticker symbol.
-   * @param {string} attribute The GOOGLEFINANCE attribute (price, changepct, etc.).
-   * @return {number|null} The value or null if unavailable.
+   * Helper: Parses a GOOGLEFINANCE cell value, handling "Loading...", errors, and valid numbers.
+   * @param {*} value The raw cell value from GOOGLEFINANCE.
+   * @param {string} ticker Ticker symbol (for logging).
+   * @param {string} attribute Attribute name (for logging).
+   * @return {number|null} Parsed number or null if invalid.
    */
-  getGoogleFinanceValue: function(ticker, attribute) {
-    try {
-      const ss = this.getSpreadsheet();
-      let tempSheet = ss.getSheetByName('_TempGoogleFinance');
+  parseGoogleFinanceValue: function(value, ticker, attribute) {
+    // Valid number
+    if (typeof value === 'number' && !isNaN(value)) {
+      return value;
+    }
 
-      if (!tempSheet) {
-        tempSheet = ss.insertSheet('_TempGoogleFinance');
-        tempSheet.hideSheet();  // Hide from user view
-      }
-
-      const formula = `=GOOGLEFINANCE("${ticker}","${attribute}")`;
-      const cell = tempSheet.getRange('A1');
-      cell.setFormula(formula);
-      SpreadsheetApp.flush();  // Wait for formula to resolve
-
-      const value = cell.getValue();
-
-      // Check if value is valid
-      if (typeof value === 'number' && !isNaN(value)) {
-        return value;
-      }
-
-      return null;
-    } catch (error) {
-      Utils.log(`[${ticker}] GOOGLEFINANCE(${attribute}) error: ${error.message}`);
+    // Check for "Loading..." string
+    if (typeof value === 'string' && value.toLowerCase().includes('loading')) {
+      Utils.log(`[${ticker}] GOOGLEFINANCE(${attribute}) still loading - skipping`);
       return null;
     }
+
+    // Check for error strings (#N/A, #ERROR, etc.)
+    if (typeof value === 'string' && value.startsWith('#')) {
+      Utils.log(`[${ticker}] GOOGLEFINANCE(${attribute}) error: ${value}`);
+      return null;
+    }
+
+    // Empty or other invalid value
+    Utils.log(`[${ticker}] GOOGLEFINANCE(${attribute}) returned invalid value: ${value}`);
+    return null;
   },
 
   /**
@@ -385,15 +424,19 @@ const SheetManager = {
     row[cols.WEIGHT_PCT - 1] = ''; // Set later by setDashboardWeightFormulas
     row[cols.MARKET_CAP - 1] = marketCapFormula;
 
-    // P/E: Always use GOOGLEFINANCE (real-time)
-    row[cols.PE - 1] = peFormulaLive;  // =GOOGLEFINANCE("ticker","pe")
+    // P/E: From Finviz (static value, updated every 20 minutes via cache)
+    row[cols.PE - 1] = v(data.pe);
 
-    // EPS: Direct from GOOGLEFINANCE (simpler and more reliable)
-    row[cols.EPS - 1] = `=GOOGLEFINANCE("${ticker}","eps")`;
+    // EPS: From Finviz (static value, updated every 20 minutes via cache)
+    row[cols.EPS - 1] = v(data.eps);
 
-    // Today P/E: Calculate from current Price / EPS (with protection for empty values)
-    const cEPS = Utils.colToLetter(cols.EPS);  // M
-    row[cols.TODAY_PE - 1] = `=IF(AND(ISNUMBER(${cPrice}${R}),ISNUMBER(${cEPS}${R}),${cEPS}${R}>0),${cPrice}${R}/${cEPS}${R},"")`;
+    // Today P/E: Calculate from current Price / Finviz EPS (with protection for empty values)
+    const epsValue = data.eps;
+    if (epsValue && epsValue > 0) {
+      row[cols.TODAY_PE - 1] = `=IF(ISNUMBER(${cPrice}${R}),${cPrice}${R}/${epsValue},"")`;
+    } else {
+      row[cols.TODAY_PE - 1] = '';
+    }
 
     // Forward P/E: From Finviz (cached value, updated every 7 days)
     row[cols.FWD_PE - 1] = v(data.fwdPe);

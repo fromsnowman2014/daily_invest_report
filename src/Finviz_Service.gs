@@ -119,30 +119,36 @@ const FinvizService = {
   },
 
   /**
-   * Gets both Forward P/E and Forward EPS in one call (optimization).
-   * Fetches HTML once and extracts both metrics.
+   * Gets all P/E and EPS metrics in one call (optimization).
+   * Fetches HTML once and extracts: P/E (trailing), EPS (ttm), Forward P/E, Forward EPS.
    * @param {string} ticker Stock ticker symbol.
-   * @return {Object} Object with fwdPe, fwdEPS, and fromCache properties.
+   * @return {Object} Object with pe, eps, fwdPe, fwdEPS, and fromCache properties.
    */
   getForwardMetrics: function(ticker) {
     if (!ticker) {
       Utils.log(`[Finviz] Error: Missing ticker`);
-      return { fwdPe: null, fwdEPS: null, fromCache: false };
+      return { pe: null, eps: null, fwdPe: null, fwdEPS: null, fromCache: false };
     }
 
-    const cacheKeyPE = `FINVIZ_${ticker}_Forward P/E`;
-    const cacheKeyEPS = `FINVIZ_${ticker}_EPS next Y`;
+    const cacheKeyPE = `FINVIZ_${ticker}_P/E`;
+    const cacheKeyEPS = `FINVIZ_${ticker}_EPS (ttm)`;
+    const cacheKeyFwdPE = `FINVIZ_${ticker}_Forward P/E`;
+    const cacheKeyFwdEPS = `FINVIZ_${ticker}_EPS next Y`;
     const cache = CacheService.getScriptCache();
 
-    // Check if both are cached
+    // Check if all metrics are cached
     const cachedPE = cache.get(cacheKeyPE);
     const cachedEPS = cache.get(cacheKeyEPS);
+    const cachedFwdPE = cache.get(cacheKeyFwdPE);
+    const cachedFwdEPS = cache.get(cacheKeyFwdEPS);
 
-    if (cachedPE && cachedEPS) {
-      Utils.log(`[${ticker}] Forward metrics from cache: PE=${cachedPE}, EPS=${cachedEPS}`);
+    if (cachedPE && cachedEPS && cachedFwdPE && cachedFwdEPS) {
+      Utils.log(`[${ticker}] All P/E/EPS metrics from cache: PE=${cachedPE}, EPS=${cachedEPS}, FwdPE=${cachedFwdPE}, FwdEPS=${cachedFwdEPS}`);
       return {
-        fwdPe: parseFloat(cachedPE),
-        fwdEPS: parseFloat(cachedEPS),
+        pe: parseFloat(cachedPE),
+        eps: parseFloat(cachedEPS),
+        fwdPe: parseFloat(cachedFwdPE),
+        fwdEPS: parseFloat(cachedFwdEPS),
         fromCache: true
       };
     }
@@ -151,39 +157,51 @@ const FinvizService = {
     const url = `${this.BASE_URL}?t=${ticker}`;
 
     try {
-      Utils.log(`[${ticker}] Fetching Forward metrics from Finviz...`);
+      Utils.log(`[${ticker}] Fetching P/E and EPS metrics from Finviz...`);
 
       const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
       const code = response.getResponseCode();
 
       if (code !== 200) {
         Utils.log(`[Finviz] HTTP Error ${code} for ${ticker}`);
-        return { fwdPe: null, fwdEPS: null };
+        return { pe: null, eps: null, fwdPe: null, fwdEPS: null, fromCache: false };
       }
 
       const html = response.getContentText();
 
-      // Extract Forward P/E
-      const regexPE = /Forward P\/E<\/td>.*?<b>\s*(-?[\d\.]+)\s*<\/b>/i;
+      // Extract P/E (trailing)
+      const regexPE = /P\/E<\/td>.*?<b>\s*(-?[\d\.]+)\s*<\/b>/i;
       const matchPE = html.match(regexPE);
-      const fwdPe = matchPE && matchPE[1] ? parseFloat(matchPE[1]) : null;
+      const pe = matchPE && matchPE[1] ? parseFloat(matchPE[1]) : null;
+
+      // Extract EPS (ttm)
+      const regexEPS = /EPS \(ttm\)<\/td>.*?<b>\s*(-?[\d\.]+)\s*<\/b>/i;
+      const matchEPS = html.match(regexEPS);
+      const eps = matchEPS && matchEPS[1] ? parseFloat(matchEPS[1]) : null;
+
+      // Extract Forward P/E
+      const regexFwdPE = /Forward P\/E<\/td>.*?<b>\s*(-?[\d\.]+)\s*<\/b>/i;
+      const matchFwdPE = html.match(regexFwdPE);
+      const fwdPe = matchFwdPE && matchFwdPE[1] ? parseFloat(matchFwdPE[1]) : null;
 
       // Extract EPS next Y (Forward EPS)
-      const regexEPS = /EPS next Y<\/td>.*?<b>\s*(-?[\d\.]+)\s*<\/b>/i;
-      const matchEPS = html.match(regexEPS);
-      const fwdEPS = matchEPS && matchEPS[1] ? parseFloat(matchEPS[1]) : null;
+      const regexFwdEPS = /EPS next Y<\/td>.*?<b>\s*(-?[\d\.]+)\s*<\/b>/i;
+      const matchFwdEPS = html.match(regexFwdEPS);
+      const fwdEPS = matchFwdEPS && matchFwdEPS[1] ? parseFloat(matchFwdEPS[1]) : null;
 
-      // Cache both
-      if (fwdPe) cache.put(cacheKeyPE, fwdPe.toString(), this.CACHE_DURATION);
-      if (fwdEPS) cache.put(cacheKeyEPS, fwdEPS.toString(), this.CACHE_DURATION);
+      // Cache all metrics
+      if (pe) cache.put(cacheKeyPE, pe.toString(), this.CACHE_DURATION);
+      if (eps) cache.put(cacheKeyEPS, eps.toString(), this.CACHE_DURATION);
+      if (fwdPe) cache.put(cacheKeyFwdPE, fwdPe.toString(), this.CACHE_DURATION);
+      if (fwdEPS) cache.put(cacheKeyFwdEPS, fwdEPS.toString(), this.CACHE_DURATION);
 
-      Utils.log(`[${ticker}] Forward P/E = ${fwdPe}, Forward EPS = ${fwdEPS}`);
+      Utils.log(`[${ticker}] P/E = ${pe}, EPS = ${eps}, Forward P/E = ${fwdPe}, Forward EPS = ${fwdEPS}`);
 
-      return { fwdPe, fwdEPS, fromCache: false };
+      return { pe, eps, fwdPe, fwdEPS, fromCache: false };
 
     } catch (error) {
       Utils.log(`[Finviz] Fetch error for ${ticker}: ${error.message}`);
-      return { fwdPe: null, fwdEPS: null, fromCache: false };
+      return { pe: null, eps: null, fwdPe: null, fwdEPS: null, fromCache: false };
     }
   }
 };
